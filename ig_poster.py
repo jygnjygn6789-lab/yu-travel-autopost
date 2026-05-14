@@ -221,6 +221,60 @@ def post_story(image_url: str) -> dict:
     return pub_result
 
 
+def post_reel(video_url: str, caption: str) -> dict:
+    """
+    發布 Reels 影片
+    video_url: 必須是公開可訪問的 .mp4 URL
+    """
+    import time
+    token = os.getenv("IG_ACCESS_TOKEN")
+
+    # Step 1: 建立 Reel 媒體容器
+    resp = requests.post(
+        f"{BASE_URL}/{IG_USER_ID}/media",
+        data={
+            "video_url": video_url,
+            "media_type": "REELS",
+            "caption": caption,
+            "share_to_feed": "true",
+            "access_token": token,
+        },
+    )
+    result = resp.json()
+    if "id" not in result:
+        print(f"建立 Reel 容器失敗: {result}")
+        return result
+
+    container_id = result["id"]
+    print(f"Reel 容器建立成功: {container_id}")
+
+    # Step 2: 等待處理完成
+    for _ in range(24):  # 最多等 4 分鐘
+        time.sleep(10)
+        status = requests.get(
+            f"{BASE_URL}/{container_id}",
+            params={"fields": "status_code", "access_token": token},
+        ).json().get("status_code", "")
+        print(f"Reel 處理狀態: {status}")
+        if status == "FINISHED":
+            break
+        elif status == "ERROR":
+            return {"error": "Reel 影片處理失敗"}
+
+    # Step 3: 發布
+    pub = requests.post(
+        f"{BASE_URL}/{IG_USER_ID}/media_publish",
+        data={"creation_id": container_id, "access_token": token},
+    ).json()
+
+    if "id" in pub:
+        print(f"Reel 發布成功！Post ID: {pub['id']}")
+    else:
+        print(f"Reel 發布失敗: {pub}")
+
+    return pub
+
+
 def get_account_info() -> dict:
     """取得 IG 帳號資訊（用來驗證 token 是否有效）"""
     token = os.getenv("IG_ACCESS_TOKEN")

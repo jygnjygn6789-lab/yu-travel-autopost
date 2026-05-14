@@ -55,3 +55,23 @@ def upload_pil_image(img: Image.Image, filename="travel.jpg") -> str:
     buf = io.BytesIO()
     img.convert("RGB").save(buf, format="JPEG", quality=92)
     return upload_image(buf.getvalue(), filename)
+
+
+def upload_video(video_path: str, filename="reel.mp4") -> str:
+    """上傳本地影片檔案到 litterbox，回傳公開 URL（1小時有效，夠 IG 下載用）"""
+    with open(video_path, "rb") as f:
+        video_bytes = f.read()
+    try:
+        resp = requests.post(
+            "https://litterbox.catbox.moe/resources/internals/api.php",
+            data={"reqtype": "fileupload", "time": "1h"},
+            files={"fileToUpload": (filename, video_bytes, "video/mp4")},
+            timeout=120,
+        )
+        url = resp.text.strip()
+        if url.startswith("https://"):
+            print(f"[上傳] 影片 litterbox 成功: {url}")
+            return url
+    except Exception as e:
+        print(f"[上傳] 影片上傳失敗: {e}")
+    return None
