@@ -31,7 +31,7 @@ def generate_travel_post(destination: str, deal_info: str, post_type: str = "fee
 格式要求：
 - 第一行：吸睛標題（含emoji）
 - 第二行：價格或優惠重點
-- 第三行：行動呼籲（例如：點 bio 連結訂購！）
+- 第三行：行動呼籲（例如：點 主頁 連結訂購！）
 - 不要加 hashtag
 - 用繁體中文"""
 
@@ -55,7 +55,7 @@ def generate_travel_post(destination: str, deal_info: str, post_type: str = "fee
 
 請以 JSON 格式回應：
 {{
-  "caption": "完整的 IG 貼文文案（含 hashtag，約 200 字，語氣活潑，結尾提醒點 bio 連結）",
+  "caption": "完整的 IG 貼文文案（含 hashtag，約 200 字，語氣活潑，結尾提醒點 主頁 連結）",
   "highlights": ["🗼 第一個亮點", "🍜 第二個亮點", "🛍️ 第三個亮點", "🚇 第四個亮點", "📸 第五個亮點"]
 }}
 
@@ -102,7 +102,7 @@ def generate_travel_tip_post(topic: str) -> dict:
 格式要求：
 1. 開頭吸睛標題（含emoji）
 2. 列出 5-7 個實用重點（每點一行，前面加 emoji）
-3. 結尾：「更多優惠連結在 bio ⬆️ 記得追蹤不漏接！」
+3. 結尾：「更多優惠連結在 主頁 ⬆️ 記得追蹤不漏接！」
 4. 加上 15-20 個 hashtag
 5. 全文繁體中文，語氣像朋友分享
 6. 總長度約 200-300 字"""
@@ -112,7 +112,7 @@ def generate_travel_tip_post(topic: str) -> dict:
 
 請以 JSON 格式回應：
 {{
-  "caption": "完整 IG 文案（開頭吸睛、5-7 個實用重點、結尾提醒點 bio、加 hashtag、繁體中文、約 250 字）",
+  "caption": "完整 IG 文案（開頭吸睛、5-7 個實用重點、結尾提醒點 主頁、加 hashtag、繁體中文、約 250 字）",
   "highlights": ["✈️ 重點一", "🗺️ 重點二", "💰 重點三", "📱 重點四", "⏰ 重點五"]
 }}
 

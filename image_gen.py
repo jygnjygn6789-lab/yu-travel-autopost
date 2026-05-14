@@ -150,8 +150,25 @@ def _full_overlay(img: Image.Image, alpha=140) -> Image.Image:
     return result.convert("RGB")
 
 
+def _strip_emoji(text: str) -> str:
+    """移除字型不支援的 emoji（保留中文、英文、箭頭符號）"""
+    import re
+    return re.sub(
+        r'[\U0001F000-\U0001FFFF'
+        r'\U00002702-\U000027B0'
+        r'\U0001F1E0-\U0001F1FF'
+        r'\U00002500-\U00002BEF'
+        r'\U00002190-\U000021FF'
+        r']+',
+        '', text
+    ).strip()
+
+
 def _shadow_text(draw, xy, text, font, color=WHITE):
-    """帶陰影的文字"""
+    """帶陰影的文字（自動移除 emoji 避免顯示方格）"""
+    text = _strip_emoji(text)
+    if not text:
+        return
     x, y = xy
     for dx, dy in [(3, 3), (-2, 2), (2, -2), (0, 4)]:
         draw.text((x + dx, y + dy), text, font=font, fill=(0, 0, 0, 180))
@@ -159,11 +176,14 @@ def _shadow_text(draw, xy, text, font, color=WHITE):
 
 
 def _center_text(draw, y, text, font, color=WHITE, width=1080):
-    """水平置中文字"""
+    """水平置中文字（自動移除 emoji）"""
+    text = _strip_emoji(text)
+    if not text:
+        return 0
     bbox = draw.textbbox((0, 0), text, font=font)
     x = (width - (bbox[2] - bbox[0])) // 2
     _shadow_text(draw, (x, y), text, font, color)
-    return bbox[3] - bbox[1]  # 回傳文字高度
+    return bbox[3] - bbox[1]
 
 
 def _parse_deal(deal_info: str):
@@ -207,20 +227,14 @@ def make_card1_deal(bg_url: str, destination: str, emoji: str, deal_info: str) -
     if route:
         _shadow_text(draw, (55, 790), f"✈  {route}", _get_font(46), LIGHT_BLUE)
 
-    # 價格（黃底黑字高亮）
+    # 價格（黃色大字，無底框）
     if price:
-        price_text = f" 來回 {price} "
-        font_p = _get_font(76)
-        bbox = draw.textbbox((55, 875), price_text, font=font_p)
-        draw.rounded_rectangle(
-            [bbox[0] - 6, bbox[1] - 6, bbox[2] + 6, bbox[3] + 6],
-            radius=12, fill=YELLOW
-        )
-        draw.text((55, 875), price_text, font=font_p, fill=(30, 15, 60))
+        price_text = f"來回 {price}"
+        _shadow_text(draw, (55, 875), price_text, _get_font(80), YELLOW)
 
     # 航空公司
     if airline:
-        _shadow_text(draw, (55, 980), f"航空：{airline}　　點 bio 連結搶訂 ⬆", _get_font(34), GRAY)
+        _shadow_text(draw, (55, 980), f"航空：{airline}　　點 主頁 連結搶訂 ⬆", _get_font(34), GRAY)
 
     return img
 
@@ -249,7 +263,7 @@ def make_card2_highlights(bg_url: str, destination: str, emoji: str, highlights:
         y += 145
 
     # 底部 CTA
-    _shadow_text(draw, (55, 980), "更多優惠 → 連結在 bio ⬆", _get_font(36), YELLOW)
+    _shadow_text(draw, (55, 980), "更多優惠 → 連結在 主頁 ⬆", _get_font(36), YELLOW)
 
     return img
 
@@ -289,7 +303,7 @@ def make_card3_cta(destination: str, emoji: str) -> Image.Image:
     _center_text(draw, 490, "更多旅遊優惠特價", _get_font(60), YELLOW)
 
     # 大箭頭 CTA
-    _center_text(draw, 620, "⬆  連結在 bio", _get_font(82))
+    _center_text(draw, 620, "⬆  連結在 主頁", _get_font(82))
 
     # 帳號名
     _center_text(draw, 830, "@taiwan.travel.deals", _get_font(42), LIGHT_BLUE)
