@@ -3,9 +3,14 @@ Yu的出國旅遊大全 - IG 自動發文主程式
 每天自動發：1 則貼文 + 2 則限時動態
 """
 import os
+import sys
 import schedule
 import time
 from dotenv import load_dotenv
+
+# Fix Windows CP950 encoding issues with emoji
+if sys.stdout.encoding and sys.stdout.encoding.lower() not in ('utf-8', 'utf8'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
 from ig_poster import post_feed, post_story, get_account_info, refresh_token_if_needed
 from content_gen import generate_travel_post, generate_travel_tip_post
