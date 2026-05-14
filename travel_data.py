@@ -92,7 +92,7 @@ def get_story_content() -> dict:
     return stories
 
 
-def get_image_url(destination: str) -> str:
+def get_image_url(destination: str, lock: int = None) -> str:
     """
     取得與目的地/主題相符的圖片直接網址
     使用 loremflickr.com（免費、無需 API key、圖片與關鍵字相符）
@@ -124,7 +124,8 @@ def get_image_url(destination: str) -> str:
             break
 
     try:
-        url = f"https://loremflickr.com/1080/1080/{keyword}"
+        lock_param = f"?lock={lock}" if lock else f"?lock={random.randint(1, 500)}"
+        url = f"https://loremflickr.com/1080/1080/{keyword}{lock_param}"
         resp = requests.head(url, allow_redirects=True, timeout=10)
         if resp.status_code == 200:
             return resp.url

@@ -34,38 +34,61 @@ def generate_travel_post(destination: str, deal_info: str, post_type: str = "fee
 - 第三行：行動呼籲（例如：點 bio 連結訂購！）
 - 不要加 hashtag
 - 用繁體中文"""
+
+        message = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=300,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return {
+            "caption": message.content[0].text,
+            "highlights": [],
+            "klook_link": KLOOK_LINK,
+            "kkday_link": KKDAY_LINK,
+        }
     else:
         prompt = f"""你是台灣旅遊 IG 帳號「Yu的出國旅遊大全」的小編。
-請為以下旅遊資訊生成一則吸引人的 IG 貼文：
+請為以下旅遊資訊生成 IG 貼文文案，以及 5 個旅遊亮點（給圖片用）。
 
 目的地：{destination}
 特價資訊：{deal_info}
-推廣連結說明：文案中提示讀者點 bio 連結訂購
 
-格式要求：
-1. 開頭要有吸睛的第一句話（含emoji）
-2. 介紹旅遊亮點或省錢重點（3-5點）
-3. 提醒讀者「連結在 bio」或「私訊我獲取連結」
-4. 最後加上 15-20 個相關 hashtag（中英文混合）
-5. 全文用繁體中文
-6. 語氣活潑、像朋友推薦
-7. 總長度約 150-250 字"""
+請以 JSON 格式回應：
+{{
+  "caption": "完整的 IG 貼文文案（含 hashtag，約 200 字，語氣活潑，結尾提醒點 bio 連結）",
+  "highlights": ["🗼 第一個亮點", "🍜 第二個亮點", "🛍️ 第三個亮點", "🚇 第四個亮點", "📸 第五個亮點"]
+}}
 
-    message = client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=600,
-        messages=[{"role": "user", "content": prompt}]
-    )
+規則：
+- caption：開頭吸睛、列出旅遊重點、結尾 15-20 個 hashtag、繁體中文
+- highlights：每條 20 字以內、含 emoji、繁體中文、針對 {destination}"""
 
-    caption = message.content[0].text
+        message = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=800,
+            messages=[{"role": "user", "content": prompt}]
+        )
 
-    return {
-        "caption": caption,
-        "klook_link": KLOOK_LINK,
-        "kkday_link": KKDAY_LINK,
-        "destination": destination,
-        "deal_info": deal_info,
-    }
+        import json, re
+        raw = message.content[0].text
+        try:
+            # 擷取 JSON 部分
+            match = re.search(r'\{.*\}', raw, re.DOTALL)
+            data = json.loads(match.group()) if match else {}
+            caption = data.get("caption", raw)
+            highlights = data.get("highlights", [])
+        except Exception:
+            caption = raw
+            highlights = []
+
+        return {
+            "caption": caption,
+            "highlights": highlights,
+            "klook_link": KLOOK_LINK,
+            "kkday_link": KKDAY_LINK,
+            "destination": destination,
+            "deal_info": deal_info,
+        }
 
 
 def generate_travel_tip_post(topic: str) -> dict:
@@ -84,13 +107,36 @@ def generate_travel_tip_post(topic: str) -> dict:
 5. 全文繁體中文，語氣像朋友分享
 6. 總長度約 200-300 字"""
 
+    prompt_json = f"""你是台灣旅遊 IG 帳號「Yu的出國旅遊大全」的小編。
+請為「{topic}」生成 IG 攻略貼文及 5 個重點。
+
+請以 JSON 格式回應：
+{{
+  "caption": "完整 IG 文案（開頭吸睛、5-7 個實用重點、結尾提醒點 bio、加 hashtag、繁體中文、約 250 字）",
+  "highlights": ["✈️ 重點一", "🗺️ 重點二", "💰 重點三", "📱 重點四", "⏰ 重點五"]
+}}
+
+highlights 要跟「{topic}」直接相關，每條 20 字以內，含 emoji。"""
+
     message = client.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=700,
-        messages=[{"role": "user", "content": prompt}]
+        max_tokens=800,
+        messages=[{"role": "user", "content": prompt_json}]
     )
 
+    import json, re
+    raw = message.content[0].text
+    try:
+        match = re.search(r'\{.*\}', raw, re.DOTALL)
+        data = json.loads(match.group()) if match else {}
+        caption = data.get("caption", raw)
+        highlights = data.get("highlights", [])
+    except Exception:
+        caption = raw
+        highlights = []
+
     return {
-        "caption": message.content[0].text,
+        "caption": caption,
+        "highlights": highlights,
         "topic": topic,
     }

@@ -112,6 +112,74 @@ def post_feed(image_url: str, caption: str) -> dict:
     return pub_result
 
 
+def post_carousel(image_urls: list, caption: str) -> dict:
+    """
+    發布輪播貼文（2-10 張圖）
+    image_urls: 公開 URL 清單
+    """
+    token = os.getenv("IG_ACCESS_TOKEN")
+
+    # Step 1: 建立每張圖的媒體容器
+    container_ids = []
+    for i, url in enumerate(image_urls):
+        resp = requests.post(
+            f"{BASE_URL}/{IG_USER_ID}/media",
+            data={"image_url": url, "is_carousel_item": "true", "access_token": token},
+        )
+        result = resp.json()
+        if "id" not in result:
+            print(f"輪播項目 {i+1} 建立失敗: {result}")
+            return result
+        container_ids.append(result["id"])
+        print(f"輪播項目 {i+1}/{len(image_urls)} 建立成功: {result['id']}")
+
+    # Step 2: 建立輪播容器
+    import time
+    time.sleep(3)
+    resp = requests.post(
+        f"{BASE_URL}/{IG_USER_ID}/media",
+        data={
+            "media_type": "CAROUSEL",
+            "caption": caption,
+            "children": ",".join(container_ids),
+            "access_token": token,
+        },
+    )
+    result = resp.json()
+    if "id" not in result:
+        print(f"輪播容器建立失敗: {result}")
+        return result
+
+    carousel_id = result["id"]
+    print(f"輪播容器建立成功: {carousel_id}")
+
+    # Step 3: 等待處理完成
+    for _ in range(12):
+        time.sleep(5)
+        status = requests.get(
+            f"{BASE_URL}/{carousel_id}",
+            params={"fields": "status_code", "access_token": token},
+        ).json().get("status_code", "")
+        print(f"輪播處理狀態: {status}")
+        if status == "FINISHED":
+            break
+        elif status == "ERROR":
+            return {"error": "圖片處理失敗"}
+
+    # Step 4: 發布
+    pub = requests.post(
+        f"{BASE_URL}/{IG_USER_ID}/media_publish",
+        data={"creation_id": carousel_id, "access_token": token},
+    ).json()
+
+    if "id" in pub:
+        print(f"輪播貼文發布成功！Post ID: {pub['id']}")
+    else:
+        print(f"輪播貼文發布失敗: {pub}")
+
+    return pub
+
+
 def post_story(image_url: str) -> dict:
     """
     發布限時動態（圖片）

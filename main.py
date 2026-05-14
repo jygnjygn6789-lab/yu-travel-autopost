@@ -12,10 +12,12 @@ from dotenv import load_dotenv
 if sys.stdout.encoding and sys.stdout.encoding.lower() not in ('utf-8', 'utf8'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
-from ig_poster import post_feed, post_story, get_account_info, refresh_token_if_needed
+from ig_poster import post_feed, post_carousel, post_story, get_account_info, refresh_token_if_needed
 from content_gen import generate_travel_post, generate_travel_tip_post
 from travel_data import get_daily_content, get_story_content, get_image_url
 from fb_poster import post_fb_feed, check_fb_page
+from image_gen import generate_deal_carousel, generate_tip_carousel
+from img_uploader import upload_pil_image
 
 load_dotenv()
 
@@ -27,26 +29,51 @@ def run_daily_post():
 
     if content["type"] == "deal":
         destination = content["destination"]
+        emoji = content["emoji"]
         deal_info = content["deal_info"]
         image_url = get_image_url(destination)
         result = generate_travel_post(destination, deal_info, post_type="feed")
         caption = result["caption"]
+        highlights = result.get("highlights", [])
+
+        print(f"[貼文] 生成輪播圖片...")
+        cards = generate_deal_carousel(destination, emoji, deal_info, image_url, highlights)
     else:
         topic = content["topic"]
         image_url = get_image_url("旅遊")
         result = generate_travel_tip_post(topic)
         caption = result["caption"]
+        highlights = result.get("highlights", [])
 
-    print(f"[貼文] 圖片: {image_url}")
+        print(f"[貼文] 生成輪播圖片...")
+        cards = generate_tip_carousel(topic, image_url, highlights)
+
+    # 上傳 3 張圖片
+    print(f"[貼文] 上傳圖片到圖床...")
+    image_urls = []
+    for i, card in enumerate(cards):
+        url = upload_pil_image(card, f"travel_card{i+1}.jpg")
+        if url:
+            image_urls.append(url)
+            print(f"[貼文] 圖片 {i+1}: {url}")
+        else:
+            print(f"[貼文] 圖片 {i+1} 上傳失敗，跳過")
+
     print(f"[貼文] 文案預覽:\n{caption[:100]}...")
 
-    # 發 IG
-    post_result = post_feed(image_url, caption)
+    # 發 IG（輪播）
+    if len(image_urls) >= 2:
+        post_result = post_carousel(image_urls, caption)
+    elif len(image_urls) == 1:
+        post_result = post_feed(image_urls[0], caption)
+    else:
+        print("[貼文] 沒有可用圖片，取消發文")
+        return
     print(f"[貼文] IG 結果: {post_result}")
 
     # 同步發 FB（若有設定 FB_PAGE_TOKEN）
     if os.getenv("FB_PAGE_TOKEN"):
-        fb_result = post_fb_feed(image_url, caption)
+        fb_result = post_fb_feed(image_urls[0], caption)
         print(f"[貼文] FB 結果: {fb_result}")
     else:
         print("[貼文] FB_PAGE_TOKEN 未設定，跳過 FB 發文")
