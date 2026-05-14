@@ -18,6 +18,7 @@ from travel_data import get_daily_content, get_story_content, get_image_url
 from fb_poster import post_fb_feed, check_fb_page
 from image_gen import generate_deal_carousel, generate_tip_carousel
 from img_uploader import upload_pil_image
+from comment_bot import run_comment_bot
 
 load_dotenv()
 
@@ -149,10 +150,12 @@ if __name__ == "__main__":
         print("\n開始排程自動發文...")
         print("每天 10:00 自動發貼文")
         print("每天 19:00 自動發限時動態")
+        print("每 30 分鐘自動掃描留言（按讚+回覆）")
         print("按 Ctrl+C 停止\n")
 
         schedule.every().day.at("10:00").do(run_daily_post)
         schedule.every().day.at("19:00").do(run_daily_stories)
+        schedule.every(30).minutes.do(run_comment_bot)
 
         while True:
             schedule.run_pending()
