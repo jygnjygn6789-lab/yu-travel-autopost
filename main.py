@@ -15,6 +15,7 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() not in ('utf-8', 'utf8'):
 from ig_poster import post_feed, post_story, get_account_info, refresh_token_if_needed
 from content_gen import generate_travel_post, generate_travel_tip_post
 from travel_data import get_daily_content, get_story_content, get_image_url
+from fb_poster import post_fb_feed, check_fb_page
 
 load_dotenv()
 
@@ -39,8 +40,16 @@ def run_daily_post():
     print(f"[貼文] 圖片: {image_url}")
     print(f"[貼文] 文案預覽:\n{caption[:100]}...")
 
+    # 發 IG
     post_result = post_feed(image_url, caption)
-    print(f"[貼文] 結果: {post_result}")
+    print(f"[貼文] IG 結果: {post_result}")
+
+    # 同步發 FB（若有設定 FB_PAGE_TOKEN）
+    if os.getenv("FB_PAGE_TOKEN"):
+        fb_result = post_fb_feed(image_url, caption)
+        print(f"[貼文] FB 結果: {fb_result}")
+    else:
+        print("[貼文] FB_PAGE_TOKEN 未設定，跳過 FB 發文")
 
 
 def run_daily_stories():
@@ -72,6 +81,16 @@ def check_account():
     else:
         print(f"帳號確認失敗: {info}")
         print("請重新產生 Token 並更新 .env 中的 IG_ACCESS_TOKEN")
+
+    # 確認 FB 粉專狀態
+    if os.getenv("FB_PAGE_TOKEN"):
+        fb_info = check_fb_page()
+        if "name" in fb_info:
+            print(f"FB 粉專確認成功: {fb_info['name']} (粉絲數: {fb_info.get('fan_count', '不明')})")
+        else:
+            print(f"FB 粉專確認失敗: {fb_info}")
+    else:
+        print("FB_PAGE_TOKEN 未設定，FB 自動發文停用")
 
 
 def manual_post():
