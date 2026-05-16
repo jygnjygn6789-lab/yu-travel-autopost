@@ -66,7 +66,7 @@ def upload_video(video_path: str, filename="reel.mp4") -> str:
             "https://litterbox.catbox.moe/resources/internals/api.php",
             data={"reqtype": "fileupload", "time": "1h"},
             files={"fileToUpload": (filename, video_bytes, "video/mp4")},
-            timeout=120,
+            timeout=180,
         )
         url = resp.text.strip()
         if url.startswith("https://"):

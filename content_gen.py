@@ -10,8 +10,10 @@ load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=True)
 
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
-KLOOK_LINK = f"https://affiliate.klook.com/redirect?aid={os.getenv('KLOOK_AID')}&aff_adid={os.getenv('KLOOK_AFF_ADID')}&k_site=https%3A%2F%2Fwww.klook.com%2F"
-KKDAY_LINK = f"https://www.kkday.com/?cid={os.getenv('KKDAY_CID')}"
+KLOOK_LINK      = f"https://affiliate.klook.com/redirect?aid={os.getenv('KLOOK_AID')}&aff_adid={os.getenv('KLOOK_AFF_ADID')}&k_site=https%3A%2F%2Fwww.klook.com%2F"
+KKDAY_LINK      = f"https://www.kkday.com/?cid={os.getenv('KKDAY_CID')}"
+AVIASALES_LINK  = "https://aviasales.tp.st/eQqmPCwf"   # 機票比價分潤
+TRIPCOM_LINK    = "https://www.trip.com/t/1vZkBdFMVq3" # 機票+飯店分潤
 
 
 def generate_travel_post(destination: str, deal_info: str, post_type: str = "feed") -> dict:

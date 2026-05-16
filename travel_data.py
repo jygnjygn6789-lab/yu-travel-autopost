@@ -22,20 +22,26 @@ DESTINATIONS = [
     {"name": "菲律賓長灘島", "emoji": "🏄", "season": "全年"},
 ]
 
-# 旅遊攻略主題（用於漲粉貼文）
+# 出國注意事項主題（星期二、四、六）
 TRAVEL_TIPS = [
-    "日本自由行必備 App 推薦",
-    "韓國購物必去的平價店家",
-    "泰國曼谷必吃平價美食",
-    "出國前必做的 5 件事",
-    "省錢訂機票的秘訣",
-    "行李箱打包技巧大公開",
-    "旅遊保險該怎麼買",
-    "日本交通 IC 卡完整攻略",
-    "沖繩租車自駕完全指南",
-    "峇里島必去景點推薦",
-    "新加坡 3 天 2 夜行程規劃",
-    "首爾弘大逛街購物攻略",
+    "旅遊保險",
+    "航空公司怎麼選",
+    "國際駕照申請與租車",
+    "搭廉航注意事項",
+    "行李打包與托運規定",
+    "海外信用卡與換匯攻略",
+    "eSIM 選購完整攻略",
+    "機場快速通關技巧",
+    "海外緊急應變指南",
+    "出國前必做準備清單",
+    "海外醫療與看病流程",
+    "訂機票省錢完整攻略",
+    "訂旅館比價攻略",
+    "出國必備旅遊 App",
+    "護照 簽證 申請流程",
+    "海外行動上網完整攻略",
+    "旅遊詐騙常見手法防範",
+    "台灣出發最划算機場交通",
 ]
 
 # 模擬機票特價資料
@@ -53,25 +59,30 @@ FLIGHT_DEALS = [
 
 def get_daily_content() -> dict:
     """
-    根據今天的日期決定發什麼內容
-    奇數日：特價機票貼文
-    偶數日：旅遊攻略貼文
+    根據星期幾決定發什麼內容：
+    星期一（weekday 0）              → 主頁連結使用懶人包
+    星期三、五、日（weekday 2,4,6）  → 旅遊目的地懶人包
+    星期二、四、六（weekday 1,3,5）  → 出國注意事項懶人包
+    用日期做 seed，同一天多次呼叫結果相同。
     """
-    day = datetime.now().day
+    today = datetime.now()
+    weekday = today.weekday()   # 0=Mon … 6=Sun
+    seed = today.year * 10000 + today.month * 100 + today.day
+    rng = random.Random(seed)
 
-    if day % 2 == 1:
-        # 特價貼文
-        dest = random.choice(DESTINATIONS)
-        deal = random.choice(FLIGHT_DEALS)
+    if weekday == 0:               # 一 → 主頁連結懶人包
+        return {"type": "linkinbio"}
+    elif weekday in (2, 4, 6):     # 三、五、日 → 目的地
+        dest = rng.choice(DESTINATIONS)
+        deal = rng.choice(FLIGHT_DEALS)
         return {
             "type": "deal",
             "destination": dest["name"],
             "emoji": dest["emoji"],
             "deal_info": f"{deal['route']} 來回 {deal['price']}（{deal['airline']}）",
         }
-    else:
-        # 攻略貼文
-        tip = random.choice(TRAVEL_TIPS)
+    else:                          # 二、四、六 → 出國注意事項
+        tip = rng.choice(TRAVEL_TIPS)
         return {
             "type": "tip",
             "topic": tip,

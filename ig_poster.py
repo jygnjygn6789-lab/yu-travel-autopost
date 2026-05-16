@@ -180,20 +180,32 @@ def post_carousel(image_urls: list, caption: str) -> dict:
     return pub
 
 
-def post_story(image_url: str) -> dict:
+def post_story(image_url: str = None, link_url: str = None, source_media_id: str = None) -> dict:
     """
-    發布限時動態（圖片）
-    image_url: 必須是公開可訪問的圖片 URL（建議 9:16 比例）
+    發布限時動態
+    source_media_id: 直接引用已發布的貼文 ID（分享貼文到限時動態）
+    image_url: 若沒有 source_media_id，用圖片 URL 建立
+    link_url: 加入可點擊的 link sticker
     """
     token = os.getenv("IG_ACCESS_TOKEN")
 
     # Step 1: 建立 Story 媒體容器
     create_url = f"{BASE_URL}/{IG_USER_ID}/media"
-    create_params = {
-        "image_url": image_url,
-        "media_type": "STORIES",
-        "access_token": token,
-    }
+    if source_media_id:
+        create_params = {
+            "media_type": "STORIES",
+            "source_media_id": source_media_id,
+            "access_token": token,
+        }
+    else:
+        create_params = {
+            "image_url": image_url,
+            "media_type": "STORIES",
+            "access_token": token,
+        }
+    if link_url:
+        import json
+        create_params["link_sticker"] = json.dumps({"link": link_url})
     resp = requests.post(create_url, data=create_params)
     result = resp.json()
 
@@ -203,6 +215,20 @@ def post_story(image_url: str) -> dict:
 
     container_id = result["id"]
     print(f"Story 容器建立成功: {container_id}")
+
+    # Step 1.5: 等待處理完成
+    import time
+    for _ in range(10):
+        time.sleep(5)
+        status = requests.get(
+            f"{BASE_URL}/{container_id}",
+            params={"fields": "status_code", "access_token": token},
+        ).json().get("status_code", "")
+        print(f"Story 處理狀態: {status}")
+        if status == "FINISHED":
+            break
+        elif status == "ERROR":
+            return {"error": "Story 圖片處理失敗"}
 
     # Step 2: 發布
     publish_url = f"{BASE_URL}/{IG_USER_ID}/media_publish"
