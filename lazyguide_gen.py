@@ -22,9 +22,7 @@ from pexels import get_travel_photo
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=True)
 
-FONT_KAIU  = "C:/Windows/Fonts/kaiu.ttf"
-FONT_BOLD  = "C:/Windows/Fonts/msjhbd.ttc"
-FONT_REG   = "C:/Windows/Fonts/msjh.ttc"
+from font_paths import FONT_KAIU, FONT_BOLD, FONT_REG
 
 TOPIC_ICONS = {
     "機票": "✈️",

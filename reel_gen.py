@@ -10,8 +10,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageEnhance
 from moviepy import ImageClip, concatenate_videoclips, AudioFileClip, AudioArrayClip
 from pexels import search_photos, download_image
 
-FONT_BOLD = "C:/Windows/Fonts/msjhbd.ttc"
-FONT_REG  = "C:/Windows/Fonts/msjh.ttc"
+from font_paths import FONT_BOLD, FONT_REG
 SIZE = (1080, 1920)
 
 DARK_BG      = (20, 12, 6)

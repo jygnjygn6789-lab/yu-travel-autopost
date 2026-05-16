@@ -8,9 +8,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageFilter
 from pilmoji import Pilmoji
 from pexels import get_travel_photo, search_photos, download_image
 
-FONT_BOLD  = "C:/Windows/Fonts/msjhbd.ttc"
-FONT_REG   = "C:/Windows/Fonts/msjh.ttc"
-FONT_EMOJI = "C:/Windows/Fonts/seguiemj.ttf"
+from font_paths import FONT_BOLD, FONT_REG, FONT_EMOJI
 SIZE = (1080, 1080)
 
 # ── 暖色調色盤 ────────────────────────────────────────────────────────────────

@@ -19,7 +19,7 @@ from pexels import search_photos, download_image, get_travel_photo
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=True)
 
-FONT_KAIU = "C:/Windows/Fonts/kaiu.ttf"
+from font_paths import FONT_KAIU
 
 GOLD      = (245, 197, 0)
 GOLD_DARK = (30, 20, 5)
