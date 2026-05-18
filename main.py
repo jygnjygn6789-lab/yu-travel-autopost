@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 if sys.stdout.encoding and sys.stdout.encoding.lower() not in ('utf-8', 'utf8'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
-from ig_poster import post_feed, post_carousel, post_reel, get_account_info, refresh_token_if_needed
+from ig_poster import post_feed, post_carousel, post_reel, get_account_info, refresh_token_if_needed, post_wycbotai_carousel
 from content_gen import generate_travel_post, generate_travel_tip_post
 from travel_data import get_daily_content, get_story_content, get_image_url
 from fb_poster import post_fb_feed, check_fb_page
@@ -464,42 +464,56 @@ def _update_keyword_trigger(indicator_short: str):
         print(f"[WycBotAI] 已新增關鍵字觸發：{indicator_short}")
 
 
+def _post_wycbotai_robust(slides: list, caption: str, name: str) -> dict:
+    """上傳並用 WycBotAI IG 帳號發輪播（最多 3 輪重試）"""
+    import requests as _req
+    for round_n in range(3):
+        urls = _upload_cards_robust(slides, f"{name}_r{round_n}")
+        if len(urls) < 2:
+            print(f"[WycBotAI] 可用圖片不足 2 張，取消發文")
+            return {}
+        result = post_wycbotai_carousel(urls, caption)
+        if "id" in result:
+            return result
+        err = result.get("error", {})
+        code = err.get("code") if isinstance(err, dict) else None
+        subcode = err.get("error_subcode") if isinstance(err, dict) else None
+        if code == 4:
+            print(f"[WycBotAI] Rate limit，今日停止發文")
+            return result
+        elif subcode in (2207052, 2207003):  # URL 被拒 or 下載超時 → 重新上傳
+            print(f"[WycBotAI] 圖片問題（第 {round_n+1} 輪），重新上傳...")
+            continue
+        else:
+            print(f"[WycBotAI] 發文失敗：{err}")
+            return result
+    return result
+
+
 def run_wycbotai_alt():
     """週二四六發佈：華爾街金句 or 新手常犯的錯（每週交替）"""
     from wycbotai_alt_gen import get_today_alt_post
     slides, caption = get_today_alt_post()
-    result = _post_carousel_robust(slides, caption, name="wyc_alt")
+    result = _post_wycbotai_robust(slides, caption, name="wyc_alt")
     if result.get("id"):
         print(f"[WycBotAI Alt] IG 發文成功！ID: {result['id']}")
-        if os.getenv("FB_PAGE_TOKEN"):
-            cover_url = upload_pil_image(slides[0], "wyc_alt_cover.jpg")
-            if cover_url:
-                fb_result = post_fb_feed(cover_url, caption)
-                print(f"[WycBotAI Alt] FB 發文結果: {fb_result}")
     else:
         print(f"[WycBotAI Alt] 發文失敗：{result}")
 
 
 def run_wycbotai_indicator(indicator_name: str = None):
-    """發布 WycBotAI 每日指標教學輪播（IG + FB）"""
+    """發布 WycBotAI 每日指標教學輪播（WycBotAI IG 帳號）"""
     from indicator_tutorial_gen import generate_indicator_post, get_today_indicator
     name = indicator_name or get_today_indicator()
     print(f"\n[WycBotAI] 生成「{name}」教學輪播...")
     slides, caption = generate_indicator_post(name)
     print(f"[WycBotAI] 上傳並發文...")
-    result = _post_carousel_robust(slides, caption, name="wyc_indicator")
+    result = _post_wycbotai_robust(slides, caption, name="wyc_indicator")
     if result.get("id"):
         print(f"[WycBotAI] IG 發文成功！ID: {result['id']}")
-        # 自動更新關鍵字 DM 觸發設定（從指標名稱提取縮寫）
         import re as _re
-        kw = name.split("（")[0].strip()  # "EMA（指數移動平均線）" → "EMA"
+        kw = name.split("（")[0].strip()
         _update_keyword_trigger(kw)
-
-        if os.getenv("FB_PAGE_TOKEN"):
-            cover_url = upload_pil_image(slides[0], "wyc_cover.jpg")
-            if cover_url:
-                fb_result = post_fb_feed(cover_url, caption)
-                print(f"[WycBotAI] FB 發文結果: {fb_result}")
     else:
         print(f"[WycBotAI] 發文失敗：{result}")
 

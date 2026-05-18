@@ -100,7 +100,7 @@ def footer_tag(img):
     img = ov_rect(img, [0, SIZE[1] - 90, SIZE[0], SIZE[1]], (12, 7, 2, 190))
     draw = ImageDraw.Draw(img)
     draw.text((60, SIZE[1] - 74), "@taiwan.travel.deals", font=fr(36), fill=LIGHT_TXT)
-    draw.text((SIZE[0]-218, SIZE[1]-74), "主頁連結 ▶", font=fr(36), fill=(*WARM_GOLD, 220))
+    draw.text((SIZE[0]-218, SIZE[1]-74), "主頁連結 >>", font=fr(36), fill=(*WARM_GOLD, 220))
     return img
 
 
@@ -119,7 +119,7 @@ def eng_bar(img, y):
     """互動引導橫條"""
     img = ov_rect(img, [0, y, SIZE[0], y + 70], (20, 12, 5, 190))
     draw = ImageDraw.Draw(img)
-    txt = "❤️ 按讚  |  🔔 追蹤  |  💬 留言城市名取得攻略"
+    txt = "按讚  |  追蹤  |  留言城市名取得攻略"
     bb = draw.textbbox((0, 0), txt, font=fr(30))
     ex = (SIZE[0] - (bb[2]-bb[0])) // 2
     draw.text((ex, y + 16), txt, font=fr(30), fill=(220, 200, 175))
@@ -155,7 +155,7 @@ def scene_cover(bg: Image.Image, label: str, name: str, subtitle: str = "") -> n
     # swipe hint
     img = ov_rect(img, [0, 1260, SIZE[0], 1355], (15, 9, 3, 170))
     draw = ImageDraw.Draw(img)
-    center_r(draw, 1274, "👆 往上滑看更多", fr(46), LIGHT_TXT)
+    center_r(draw, 1274, "往上滑看更多", fr(46), LIGHT_TXT)
 
     img = eng_bar(img, SIZE[1] - 160)
     img = footer_tag(img)
@@ -218,12 +218,12 @@ def scene_transport(bg: Image.Image, route: str, station: str, walk: str) -> np.
     draw = ImageDraw.Draw(img)
     draw.text((60, 55), "@taiwan.travel.deals", font=fr(36), fill=(*LIGHT_TXT, 180))
 
-    img, _ = tag_pill(img, 60, 120, "  🚇 交通方式  ", fb(60), (62, 148, 142))
+    img, _ = tag_pill(img, 60, 120, "  交通方式  ", fb(60), (62, 148, 142))
 
     rows = [
-        ("🚃", "搭乘路線", route,   (62, 148, 142)),
-        ("🚉", "下車站",   station, WARM_ORANGE),
-        ("🚶", "步行時間", walk,    (138, 100, 178)),
+        ("路線", "搭乘路線", route,   (62, 148, 142)),
+        ("下車", "下車站",   station, WARM_ORANGE),
+        ("步行", "步行時間", walk,    (138, 100, 178)),
     ]
     active = [(e, l, v, c) for e, l, v, c in rows if v]
     n = len(active)
@@ -282,7 +282,7 @@ def scene_cta(bg: Image.Image, name: str) -> np.ndarray:
     center_r(draw, 858, "優惠都在主頁！", fb(58), WARM_GOLD)
 
     # 按鈕
-    btn_txt = "⬆  點主頁連結立即查看"
+    btn_txt = "點主頁連結立即查看"
     img = ov_rounded(img, [120, 990, SIZE[0]-120, 1110], 48, (*WARM_ORANGE, 225))
     draw = ImageDraw.Draw(img)
     bb = draw.textbbox((0, 0), btn_txt, font=fb(56))

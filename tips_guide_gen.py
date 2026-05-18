@@ -27,24 +27,58 @@ WHITE     = (255, 255, 255)
 
 # 每個主題的封面背景搜尋詞
 TOPIC_BG = {
-    "旅遊保險":         "travel insurance document passport",
-    "航空公司怎麼選":   "airplane boarding flight seat",
-    "國際駕照申請與租車": "car rental road trip driving",
-    "搭廉航注意事項":   "budget airline terminal airport",
-    "行李打包與托運規定": "travel luggage suitcase packing",
-    "海外信用卡與換匯攻略": "credit card money exchange travel",
-    "eSIM 選購完整攻略": "smartphone sim card travel roaming",
-    "機場快速通關技巧": "airport security check passport",
-    "海外緊急應變指南": "emergency travel safety help",
-    "出國前必做準備清單": "travel checklist preparation map",
-    "海外醫療與看病流程": "hospital medical travel health",
-    "訂機票省錢完整攻略": "airplane ticket booking cheap flight",
-    "訂旅館比價攻略":   "hotel booking online comparison",
-    "出國必備旅遊 App": "smartphone travel app navigation",
-    "護照 簽證 申請流程": "passport visa document official",
-    "海外行動上網完整攻略": "mobile internet roaming travel data",
-    "旅遊詐騙常見手法防範": "travel scam tourist warning caution",
-    "台灣出發最划算機場交通": "airport bus train transport arrival",
+    # 機票
+    "機票比較：哪個平台最便宜":     "airplane ticket laptop booking search",
+    "廉航搭乘完整注意事項":         "budget airline terminal airport gate",
+    "何時訂機票最便宜":             "calendar laptop flight booking cheap",
+    "傳統航空 vs 廉航怎麼選":       "airplane boarding flight seat compare",
+    "機票退改票規則與技巧":         "airport counter ticket change refund",
+    # 保險
+    "旅遊醫療險：保什麼、怎麼賠":   "travel insurance document hospital",
+    "信用卡附旅遊保險夠用嗎":       "credit card travel insurance document",
+    "行李遺失＆班機延誤怎麼理賠":   "lost luggage airport claim baggage",
+    # 住宿
+    "訂旅館比價平台完整比較":       "hotel booking laptop online comparison",
+    "Airbnb 訂房完整注意事項":      "airbnb cozy apartment room interior",
+    "青旅選擇與訂房技巧":           "hostel bunk bed dormitory travel",
+    # 交通
+    "國際駕照申請完整流程":         "international driving license document",
+    "租車攻略：選車、保險、還車":   "car rental road trip highway driving",
+    "機場到市區交通怎麼選":         "airport shuttle bus train transit",
+    "JR Pass 使用完整攻略":         "japan train rail pass shinkansen",
+    # 通訊
+    "出國 eSIM 完整選購攻略":       "smartphone esim travel roaming digital",
+    "漫遊 vs eSIM vs 當地 SIM 比較": "sim card mobile phone travel roaming",
+    "海外 Wi-Fi 分享器 vs eSIM 比較": "wifi router pocket device travel",
+    # 金錢
+    "出國換匯省錢完整攻略":         "money exchange currency travel coins",
+    "海外消費推薦信用卡挑選指南":   "credit card payment travel rewards",
+    "Wise 轉帳＆海外消費完整指南":  "wise transfer mobile banking travel",
+    "東南亞現金 vs 刷卡怎麼選":     "cash money southeast asia payment",
+    # 行李
+    "行李打包清單：不帶後悔的物品": "suitcase packing organized travel",
+    "托運行李規定：各航空完整比較": "airport luggage check baggage scale",
+    "隨身行李液體規定完整攻略":     "carry on bag liquid airport security",
+    # 簽證/護照
+    "台灣護照辦理與更新完整流程":   "passport document official government",
+    "免簽、落地簽、電子簽完整說明": "visa passport stamp entry border",
+    "日本簽證申請步驟攻略":         "japan visa document tokyo travel",
+    "東南亞各國入境規定比較":       "southeast asia passport visa border",
+    # 機場
+    "桃園機場出境流程完整懶人包":   "taiwan taoyuan airport terminal departure",
+    "入境海關申報注意事項":         "customs declaration airport immigration",
+    "機場免稅店購物省錢攻略":       "duty free shop airport luxury shopping",
+    "免費機場貴賓室使用完整指南":   "airport lounge luxury comfortable seat",
+    # 安全/緊急
+    "護照遺失怎麼辦：完整應變流程": "passport lost emergency help travel",
+    "海外急診看病流程與費用":       "hospital emergency medical overseas",
+    "旅遊詐騙常見手法完整防範":     "travel scam tourist warning caution",
+    # 工具/省錢
+    "出國必備 App 完整清單 2025":   "smartphone apps travel planning",
+    "Klook vs KKday vs Viator 完整比較": "travel booking activity tour app",
+    "出國 10 個省錢技巧不能不知道": "travel budget saving money tips",
+    "Google Maps 出國離線使用攻略": "google maps navigation offline phone",
+    "Google Translate 出國使用完整攻略": "google translate phone language travel",
 }
 
 
@@ -104,28 +138,38 @@ def _footer(img):
 # ── Claude 生成內容 ───────────────────────────────────────────────────────────
 
 def _claude_generate(topic: str) -> dict:
-    """生成 6 個子主題，每個 4 條建議"""
+    """針對單一主題深度拆解，生成 6 個面向各 4 條具體建議"""
     client = anthropic.Anthropic()
-    prompt = f"""你是專業旅遊達人，請用你所有知識為「{topic}」生成出國注意事項懶人包。
+    prompt = f"""你是專業旅遊達人，請用你所有知識為「{topic}」生成一篇完整深度攻略懶人包。
+
+這篇只講「{topic}」這一個主題，要講得深、講得完整，讓讀者看完這篇就夠了。
 
 請以 JSON 格式回應，包含：
-1. "subtopics"：6 個子主題名稱（4字以內，用 emoji 開頭，例如「💡 常見問題」）
-2. 每個子主題的 4 條建議（每條最多 24 字）
+1. "subtopics"：6 個面向（每個用 emoji 開頭 + 4字以內標題，涵蓋這主題的不同角度）
+2. 每個面向的 4 條具體建議（每條最多 24 字）
 
 格式：
 {{
-  "subtopics": ["📋 子主題1", "💰 子主題2", "⚠️ 子主題3", "✅ 子主題4", "📱 子主題5", "🔍 子主題6"],
-  "📋 子主題1": ["建議1", "建議2", "建議3", "建議4"],
-  "💰 子主題2": ["建議1", "建議2", "建議3", "建議4"],
+  "subtopics": ["📋 面向1", "💰 面向2", "⚠️ 面向3", "✅ 面向4", "📱 面向5", "🔍 面向6"],
+  "📋 面向1": ["建議1", "建議2", "建議3", "建議4"],
+  "💰 面向2": ["建議1", "建議2", "建議3", "建議4"],
   ...（其餘類推）
 }}
 
+建議的 6 個面向方向（依主題調整）：
+- 基本概念 / 是什麼
+- 怎麼選 / 怎麼買 / 怎麼辦
+- 實際使用步驟
+- 費用 / 價格 / 省錢技巧
+- 常見錯誤 / 踩雷避開
+- 緊急狀況 / Q&A
+
 規則：
 - 台灣人出國視角，繁體中文
-- 內容必須具體：有品牌名稱、數字、金額、網站、App 名稱更好（例如：Wise 換匯手續費 0.5%、Airalo eSIM 7天$15美金、旅平險推薦台灣人壽/富邦）
-- 針對「{topic}」這個主題，6 個子主題要涵蓋不同面向（前置準備、實際使用、省錢技巧、常見錯誤等）
-- 每條建議簡短有力，讓人看了馬上知道要怎麼做
-- 用你的知識補充台灣人容易忽略的細節"""
+- 必須具體：有品牌名稱、金額、網站、App 名稱（例如：Airalo eSIM 7天 NT$350起、Wise 換匯手續費約 0.5%、旅平險推薦富邦 e-旅平險）
+- 每條建議讓人看了馬上知道要怎麼做，不要說廢話
+- 用你的知識補充台灣人容易忽略的細節
+- 這篇只聚焦「{topic}」，不要帶入其他主題"""
 
     msg = client.messages.create(
         model="claude-sonnet-4-6",
@@ -212,15 +256,41 @@ def _draw_subtopic_card(topic: str, subtopic: str, tips: list) -> Image.Image:
 
     # EN 分類標（移除 emoji 後取英文）
     en_map = {
-        "旅遊保險": "INSURANCE", "航空公司怎麼選": "AIRLINES",
-        "國際駕照申請與租車": "DRIVING", "搭廉航注意事項": "LOW COST",
-        "行李打包與托運規定": "LUGGAGE", "海外信用卡與換匯攻略": "MONEY",
-        "eSIM 選購完整攻略": "eSIM", "機場快速通關技巧": "AIRPORT",
-        "海外緊急應變指南": "EMERGENCY", "出國前必做準備清單": "CHECKLIST",
-        "海外醫療與看病流程": "MEDICAL", "訂機票省錢完整攻略": "FLIGHTS",
-        "訂旅館比價攻略": "HOTEL", "出國必備旅遊 App": "TRAVEL APP",
-        "護照 簽證 申請流程": "VISA", "海外行動上網完整攻略": "DATA",
-        "旅遊詐騙常見手法防範": "SCAM ALERT", "台灣出發最划算機場交通": "AIRPORT BUS",
+        # 機票
+        "機票比價：哪個平台最便宜": "FLIGHTS", "廉航搭乘完整注意事項": "LOW COST",
+        "何時訂機票最便宜": "FLIGHTS", "傳統航空 vs 廉航怎麼選": "AIRLINES",
+        "機票退改票規則與技巧": "TICKETS",
+        # 保險
+        "旅遊醫療險：保什麼、怎麼賠": "INSURANCE", "信用卡附旅遊保險夠用嗎": "INSURANCE",
+        "行李遺失＆班機延誤怎麼理賠": "INSURANCE",
+        # 住宿
+        "訂旅館比價平台完整比較": "HOTEL", "Airbnb 訂房完整注意事項": "AIRBNB",
+        "青旅選擇與訂房技巧": "HOSTEL",
+        # 交通
+        "國際駕照申請完整流程": "DRIVING", "租車攻略：選車、保險、還車": "CAR RENTAL",
+        "機場到市區交通怎麼選": "TRANSIT", "JR Pass 使用完整攻略": "JR PASS",
+        # 通訊
+        "出國 eSIM 完整選購攻略": "eSIM", "漫遊 vs eSIM vs 當地 SIM 比較": "DATA",
+        "海外 Wi-Fi 分享器 vs eSIM 比較": "Wi-Fi",
+        # 金錢
+        "出國換匯省錢完整攻略": "MONEY", "海外消費推薦信用卡挑選指南": "CREDIT CARD",
+        "Wise 轉帳＆海外消費完整指南": "WISE", "東南亞現金 vs 刷卡怎麼選": "MONEY",
+        # 行李
+        "行李打包清單：不帶後悔的物品": "PACKING", "托運行李規定：各航空完整比較": "LUGGAGE",
+        "隨身行李液體規定完整攻略": "CARRY ON",
+        # 簽證/護照
+        "台灣護照辦理與更新完整流程": "PASSPORT", "免簽、落地簽、電子簽完整說明": "VISA",
+        "日本簽證申請步驟攻略": "VISA", "東南亞各國入境規定比較": "ENTRY",
+        # 機場
+        "桃園機場出境流程完整懶人包": "AIRPORT", "入境海關申報注意事項": "CUSTOMS",
+        "機場免稅店購物省錢攻略": "DUTY FREE", "免費機場貴賓室使用完整指南": "LOUNGE",
+        # 安全/緊急
+        "護照遺失怎麼辦：完整應變流程": "EMERGENCY", "海外急診看病流程與費用": "MEDICAL",
+        "旅遊詐騙常見手法完整防範": "SCAM ALERT",
+        # 工具/省錢
+        "出國必備 App 完整清單 2025": "TRAVEL APP", "Klook vs KKday vs Viator 完整比較": "BOOKING",
+        "出國 10 個省錢技巧不能不知道": "SAVE MONEY",
+        "Google Maps 出國離線使用攻略": "MAPS", "Google Translate 出國使用完整攻略": "TRANSLATE",
     }
     en = en_map.get(topic, "TRAVEL TIPS")
     fnt_en = fb(62)
