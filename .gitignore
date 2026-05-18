@@ -2,3 +2,9 @@
 __pycache__/
 *.pyc
 *.log
+output/
+last_post.json
+replied_comments.json
+test_*.py
+test_*.jpg
+bgm/

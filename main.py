@@ -12,16 +12,15 @@ from dotenv import load_dotenv
 if sys.stdout.encoding and sys.stdout.encoding.lower() not in ('utf-8', 'utf8'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
-from ig_poster import post_feed, post_carousel, post_story, post_reel, get_account_info, refresh_token_if_needed
+from ig_poster import post_feed, post_carousel, post_reel, get_account_info, refresh_token_if_needed
 from content_gen import generate_travel_post, generate_travel_tip_post
 from travel_data import get_daily_content, get_story_content, get_image_url
 from fb_poster import post_fb_feed, check_fb_page
-from thaihi_guide_gen import generate_thaihi_guide
-from tips_guide_gen import generate_tips_guide
+from minimal_gen import generate_minimal_guide
 from linkinbio_guide_gen import generate_linkinbio_guide
 from image_gen import generate_tip_carousel
 from img_uploader import upload_pil_image, upload_video
-from comment_bot import run_comment_bot
+from comment_bot import run_comment_bot, run_keyword_dm_bot
 
 load_dotenv()
 
@@ -108,15 +107,14 @@ def run_daily_post():
         cards, caption = generate_linkinbio_guide()
     elif content["type"] == "deal":
         destination = content["destination"]
-        # 去掉國家前綴，例如「日本東京」→「東京」
         for prefix in ["日本", "韓國", "泰國", "菲律賓", "越南"]:
             destination = destination.replace(prefix, "")
-        print(f"[貼文] 生成 {destination} 金色風格懶人包（7 張）...")
-        cards, caption = generate_thaihi_guide(destination)
+        print(f"[貼文] 生成 {destination} 極簡風格懶人包（7 張）...")
+        cards, caption = generate_minimal_guide(destination, mode="destination")
     else:
         topic = content["topic"]
-        print(f"[貼文] 生成「{topic}」金色風格懶人包（7 張）...")
-        cards, caption = generate_tips_guide(topic)
+        print(f"[貼文] 生成「{topic}」極簡風格懶人包（7 張）...")
+        cards, caption = generate_minimal_guide(topic, mode="tip")
 
     print(f"[貼文] 文案預覽:\n{caption[:100]}...")
     print(f"[貼文] 上傳並發文（自動重試）...")
@@ -146,33 +144,125 @@ def run_daily_post():
         print("[貼文] FB_PAGE_TOKEN 未設定，跳過 FB 發文")
 
 
-def run_daily_stories():
-    """每天下午 7:00 發 2 則限時動態（引用今日貼文圖片）"""
-    import json
-    print("\n[限時動態] 開始發今日限時動態...")
-    linkinbio_url = "https://yu-travel-linkinbio-visibility-public-production.up.railway.app"
+def run_evening_reel():
+    """每天晚上 7:00 發一則晚間 Reel（根據當天主題生成）"""
+    import json as _json, re as _re, anthropic as _anthropic
+    from reel_gen import generate_spot_reel
 
-    # 讀取今日貼文 ID
-    last_post_path = os.path.join(os.path.dirname(__file__), "last_post.json")
-    if os.path.exists(last_post_path):
-        with open(last_post_path, "r", encoding="utf-8") as f:
-            last_post = json.load(f)
-        post_id = last_post.get("post_id")
-        fallback_image = last_post.get("image_url")
-        print(f"[限時動態] 引用今日貼文 ID: {post_id}")
-    else:
-        post_id = None
-        fallback_image = get_image_url("旅遊")
-        print(f"[限時動態] 找不到今日貼文，使用隨機圖")
+    print("\n[晚間 Reel] 開始生成...")
+    content = get_daily_content()
+    content_type = content["type"]
 
-    # 發 2 則限時動態（用今日貼文第一張圖，帶 linkinbio 連結）
-    story_image = fallback_image or get_image_url("旅遊")
-    for i in range(1, 3):
-        print(f"[限時動態 {i}/2] 發布中...")
-        result = post_story(image_url=story_image, link_url=linkinbio_url)
-        print(f"[限時動態 {i}/2] 結果: {result}")
-        if i < 2:
-            time.sleep(10)
+    if content_type == "linkinbio":
+        manual_linkinbio_reel()
+        return
+
+    elif content_type == "deal":
+        dest_full = content.get("destination", "東京")
+        dest = dest_full
+        for prefix in ["日本", "韓國", "泰國", "菲律賓", "越南"]:
+            dest = dest.replace(prefix, "")
+
+        try:
+            client = _anthropic.Anthropic()
+            msg = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=400,
+                messages=[{"role": "user", "content": f"""為「{dest}」生成晚間 Reel 內容（著重美食與省錢），JSON 格式：
+{{"highlights": ["美食亮點1（15字內）","美食亮點2","省錢技巧1","省錢技巧2"], "route": "必吃街道或市場", "station": "最近地鐵站", "walk": "步行時間"}}
+繁體中文，具體實用，台灣人視角。"""}]
+            )
+            raw = msg.content[0].text
+            m = _re.search(r'\{.*\}', raw, _re.DOTALL)
+            data = _json.loads(m.group()) if m else {}
+        except Exception as e:
+            print(f"[晚間 Reel] Claude 失敗：{e}")
+            data = {}
+
+        highlights = data.get("highlights", [
+            f"{dest}必吃美食 TOP4", f"{dest}平價好店推薦",
+            f"{dest}購物省錢攻略", f"{dest}住宿最划算區域",
+        ])
+        transport = {
+            "route": data.get("route", "當地夜市或美食街"),
+            "station": data.get("station", "市中心站"),
+            "walk": data.get("walk", "5 分鐘"),
+        }
+        spot_name = f"{dest} 美食＆省錢"
+        location = dest_full
+        label = "旅遊省錢"
+        caption = f"""🍜 {dest}美食＆省錢完整攻略！
+
+晚上沒事做？先把這支存起來 📌
+出發前看完省至少 3000 元！
+
+完整懶人包 + 比價連結：
+{LINKINBIO}
+
+❤️ 覺得實用幫我按讚
+🔔 追蹤不錯過每日旅遊優惠
+💬 留言「{dest}」取得完整攻略
+
+#{dest}美食 #{dest}旅遊 #{dest}省錢 #旅遊攻略 #台灣旅遊 #出國省錢"""
+
+    else:  # tips
+        topic = content["topic"]
+        try:
+            client = _anthropic.Anthropic()
+            msg = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=400,
+                messages=[{"role": "user", "content": f"""為「{topic}」旅遊主題生成 Reel 內容，JSON 格式：
+{{"highlights": ["重點1（15字內）","重點2","重點3","重點4"], "route": "相關建議管道或品牌", "station": "適用對象", "walk": "節省費用或時間"}}
+繁體中文，具體實用，台灣人視角。"""}]
+            )
+            raw = msg.content[0].text
+            m = _re.search(r'\{.*\}', raw, _re.DOTALL)
+            data = _json.loads(m.group()) if m else {}
+        except Exception as e:
+            print(f"[晚間 Reel] Claude 失敗：{e}")
+            data = {}
+
+        highlights = data.get("highlights", [
+            f"{topic}必知重點", f"{topic}常見錯誤避開",
+            f"{topic}省錢技巧", f"{topic}推薦工具",
+        ])
+        transport = {
+            "route": data.get("route", "線上申請最方便"),
+            "station": data.get("station", "所有出國旅客"),
+            "walk": data.get("walk", "省下不少錢"),
+        }
+        spot_name = topic
+        location = "出國必備知識"
+        label = "旅遊攻略"
+        caption = f"""📋 {topic}完整攻略 Reel 版！
+
+很多人出國都忽略這個 ⚠️
+看完這支短片讓你少踩雷！
+
+完整攻略在主頁連結：
+{LINKINBIO}
+
+❤️ 覺得實用幫我按讚
+🔔 追蹤 @taiwan.travel.deals 不錯過更新
+💬 有問題留言問我！
+
+#{topic} #旅遊攻略 #出國注意 #懶人包 #台灣旅遊 #旅遊省錢"""
+
+    video_path = generate_spot_reel(
+        spot_name=spot_name,
+        location=location,
+        label=label,
+        highlights=highlights,
+        transport=transport,
+    )
+    print("[晚間 Reel] 上傳影片...")
+    video_url = upload_video(video_path)
+    if not video_url:
+        print("[晚間 Reel] 影片上傳失敗，跳過")
+        return
+    result = post_reel(video_url, caption)
+    print(f"[晚間 Reel] 結果: {result}")
 
 
 def run_daily_reel():
@@ -275,9 +365,9 @@ def manual_post():
 
 
 def manual_story():
-    """手動立即發限時動態（測試用）"""
-    print("\n=== 手動發限時動態模式 ===")
-    run_daily_stories()
+    """手動立即發晚間 Reel（測試用）"""
+    print("\n=== 手動發晚間 Reel 模式 ===")
+    run_evening_reel()
 
 
 def manual_linkinbio_post():
@@ -350,6 +440,70 @@ def manual_linkinbio_reel():
     print(f"[Reel] 結果: {result}")
 
 
+def _update_keyword_trigger(indicator_short: str):
+    """發文成功後，把當日指標關鍵字加入 keyword_triggers.json（避免重複）"""
+    import json as _json
+    triggers_path = os.path.join(os.path.dirname(__file__), "keyword_triggers.json")
+    try:
+        with open(triggers_path, "r", encoding="utf-8") as f:
+            triggers = _json.load(f)
+    except Exception:
+        triggers = []
+
+    existing_keywords = [t.get("keyword", "").upper() for t in triggers]
+    if indicator_short.upper() not in existing_keywords:
+        dm_msg = (
+            f"感謝你的留言！\n\n"
+            f"這裡是 WycBotAI 免費體驗連結：\nhttps://wycbotai.com\n\n"
+            f"我們的 AI 每日自動掃描 {indicator_short} 信號，幫你找到最佳進場時機。\n\n"
+            f"有任何問題歡迎繼續留言！"
+        )
+        triggers.append({"keyword": indicator_short, "dm_message": dm_msg, "public_reply": ""})
+        with open(triggers_path, "w", encoding="utf-8") as f:
+            _json.dump(triggers, f, ensure_ascii=False, indent=2)
+        print(f"[WycBotAI] 已新增關鍵字觸發：{indicator_short}")
+
+
+def run_wycbotai_alt():
+    """週二四六發佈：華爾街金句 or 新手常犯的錯（每週交替）"""
+    from wycbotai_alt_gen import get_today_alt_post
+    slides, caption = get_today_alt_post()
+    result = _post_carousel_robust(slides, caption, name="wyc_alt")
+    if result.get("id"):
+        print(f"[WycBotAI Alt] IG 發文成功！ID: {result['id']}")
+        if os.getenv("FB_PAGE_TOKEN"):
+            cover_url = upload_pil_image(slides[0], "wyc_alt_cover.jpg")
+            if cover_url:
+                fb_result = post_fb_feed(cover_url, caption)
+                print(f"[WycBotAI Alt] FB 發文結果: {fb_result}")
+    else:
+        print(f"[WycBotAI Alt] 發文失敗：{result}")
+
+
+def run_wycbotai_indicator(indicator_name: str = None):
+    """發布 WycBotAI 每日指標教學輪播（IG + FB）"""
+    from indicator_tutorial_gen import generate_indicator_post, get_today_indicator
+    name = indicator_name or get_today_indicator()
+    print(f"\n[WycBotAI] 生成「{name}」教學輪播...")
+    slides, caption = generate_indicator_post(name)
+    print(f"[WycBotAI] 上傳並發文...")
+    result = _post_carousel_robust(slides, caption, name="wyc_indicator")
+    if result.get("id"):
+        print(f"[WycBotAI] IG 發文成功！ID: {result['id']}")
+        # 自動更新關鍵字 DM 觸發設定（從指標名稱提取縮寫）
+        import re as _re
+        kw = name.split("（")[0].strip()  # "EMA（指數移動平均線）" → "EMA"
+        _update_keyword_trigger(kw)
+
+        if os.getenv("FB_PAGE_TOKEN"):
+            cover_url = upload_pil_image(slides[0], "wyc_cover.jpg")
+            if cover_url:
+                fb_result = post_fb_feed(cover_url, caption)
+                print(f"[WycBotAI] FB 發文結果: {fb_result}")
+    else:
+        print(f"[WycBotAI] 發文失敗：{result}")
+
+
 if __name__ == "__main__":
     import sys
 
@@ -367,18 +521,66 @@ if __name__ == "__main__":
             manual_linkinbio_post()
         elif sys.argv[1] == "linkinbio_reel":
             manual_linkinbio_reel()
+        elif sys.argv[1] == "wycbotai":
+            # python main.py wycbotai [指標名稱（可選）]
+            indicator_arg = sys.argv[2] if len(sys.argv) > 2 else None
+            run_wycbotai_indicator(indicator_arg)
+        elif sys.argv[1] == "wycbotai_preview":
+            # 只生成圖片存到 output/，不發文
+            from indicator_tutorial_gen import generate_indicator_post, get_today_indicator
+            indicator_arg = sys.argv[2] if len(sys.argv) > 2 else None
+            name = indicator_arg or get_today_indicator()
+            slides, caption = generate_indicator_post(name)
+            out = os.path.join(os.path.dirname(__file__), "output")
+            os.makedirs(out, exist_ok=True)
+            for i, s in enumerate(slides):
+                s.save(os.path.join(out, f"preview_{i+1}.jpg"), quality=95)
+            print(f"已存到 output/preview_1~{len(slides)}.jpg")
+            print(f"\nCaption:\n{caption}")
+        elif sys.argv[1] == "alt":
+            # python main.py alt [quotes|mistakes]
+            run_wycbotai_alt()
+        elif sys.argv[1] == "alt_preview":
+            # python main.py alt_preview [quotes|mistakes]
+            from wycbotai_alt_gen import generate_quotes_post, generate_mistakes_post, get_today_alt_post
+            mode = sys.argv[2] if len(sys.argv) > 2 else "auto"
+            if mode == "quotes":
+                slides, caption = generate_quotes_post()
+            elif mode == "mistakes":
+                slides, caption = generate_mistakes_post()
+            else:
+                slides, caption = get_today_alt_post()
+            out = os.path.join(os.path.dirname(__file__), "output")
+            os.makedirs(out, exist_ok=True)
+            for i, s in enumerate(slides):
+                s.save(os.path.join(out, f"preview_alt_{i+1}.jpg"), quality=95)
+            print(f"已存到 output/preview_alt_1~{len(slides)}.jpg")
+            print(f"\nCaption:\n{caption}")
     else:
         print("\n開始排程自動發文...")
         print("每天 10:00 自動發懶人包輪播（金色風格）")
-        print("每天 15:00 自動發 Reel 影片")
-        print("每天 19:00 自動發 2 則限時動態")
+        print("每天 15:00 自動發 Reel 影片（目的地攻略）")
+        print("每天 19:00 自動發 Reel 影片（美食/省錢/出國注意）")
         print("每 30 分鐘自動掃描留言（按讚+回覆）")
+        print("每 30 分鐘自動掃描關鍵字留言並私訊 DM")
         print("按 Ctrl+C 停止\n")
+
+        import datetime as _dt
+
+        def _wycbotai_daily():
+            """週一三五日→指標教學；週二四六→金句/避雷"""
+            dow = _dt.date.today().isoweekday()  # 1=Mon … 7=Sun
+            if dow in (1, 3, 5, 7):
+                run_wycbotai_indicator()
+            else:
+                run_wycbotai_alt()
 
         schedule.every().day.at("10:00").do(run_daily_post)
         schedule.every().day.at("15:00").do(run_daily_reel)
-        schedule.every().day.at("19:00").do(run_daily_stories)
+        schedule.every().day.at("19:00").do(run_evening_reel)
+        schedule.every().day.at("12:00").do(_wycbotai_daily)
         schedule.every(30).minutes.do(run_comment_bot)
+        schedule.every(30).minutes.do(run_keyword_dm_bot)
 
         while True:
             schedule.run_pending()

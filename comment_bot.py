@@ -66,7 +66,7 @@ def like_comment(comment_id: str) -> bool:
 
 
 def reply_to_comment(comment_id: str, message: str) -> dict:
-    """回覆留言"""
+    """回覆留言（公開）"""
     token = os.getenv("IG_ACCESS_TOKEN")
     resp = requests.post(
         f"{BASE_URL}/{comment_id}/replies",
@@ -74,6 +74,104 @@ def reply_to_comment(comment_id: str, message: str) -> dict:
         timeout=15,
     )
     return resp.json()
+
+
+def private_reply(comment_id: str, message: str) -> dict:
+    """私訊回覆留言（需要 instagram_business_manage_messages 權限）"""
+    token = os.getenv("IG_ACCESS_TOKEN")
+    resp = requests.post(
+        f"{BASE_URL}/{comment_id}/private_replies",
+        data={"message": message, "access_token": token},
+        timeout=15,
+    )
+    return resp.json()
+
+
+# ── 關鍵字觸發設定 ─────────────────────────────────────────────────────────────
+# 格式：{"keyword": "EMA", "dm_message": "...", "public_reply": "..."}
+KEYWORD_TRIGGERS_FILE = os.path.join(os.path.dirname(__file__), "keyword_triggers.json")
+DM_REPLIED_FILE = os.path.join(os.path.dirname(__file__), "dm_replied_comments.json")
+
+
+def load_keyword_triggers() -> list:
+    if os.path.exists(KEYWORD_TRIGGERS_FILE):
+        with open(KEYWORD_TRIGGERS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
+
+def _load_dm_replied() -> set:
+    if os.path.exists(DM_REPLIED_FILE):
+        with open(DM_REPLIED_FILE, "r", encoding="utf-8") as f:
+            return set(json.load(f))
+    return set()
+
+
+def _save_dm_replied(replied: set):
+    with open(DM_REPLIED_FILE, "w", encoding="utf-8") as f:
+        json.dump(list(replied), f)
+
+
+def run_keyword_dm_bot():
+    """
+    掃描最近貼文留言，發現關鍵字就自動私訊對方網址
+    關鍵字設定在 keyword_triggers.json
+    """
+    triggers = load_keyword_triggers()
+    if not triggers:
+        print("[關鍵字DM] 無觸發設定，跳過")
+        return
+
+    dm_replied = _load_dm_replied()
+    total_dm = 0
+
+    posts = get_recent_posts(limit=10)
+    if not posts:
+        print("[關鍵字DM] 無法取得貼文，跳過")
+        return
+
+    for post in posts:
+        media_id = post["id"]
+        comments = get_comments(media_id)
+
+        for comment in comments:
+            comment_id = comment["id"]
+            if comment_id in dm_replied:
+                continue
+
+            text    = comment.get("text", "").strip()
+            username = comment.get("username", "")
+
+            for trigger in triggers:
+                keyword = trigger.get("keyword", "").strip()
+                if not keyword:
+                    continue
+                # 不分大小寫、允許前後有其他文字
+                if keyword.upper() in text.upper():
+                    dm_msg     = trigger.get("dm_message", "")
+                    pub_reply  = trigger.get("public_reply", "")
+
+                    print(f"[關鍵字DM] @{username} 留言含「{keyword}」，發送 DM...")
+
+                    # 私訊
+                    if dm_msg:
+                        result = private_reply(comment_id, dm_msg)
+                        if "id" in result:
+                            print(f"[關鍵字DM] DM 發送成功")
+                            total_dm += 1
+                        else:
+                            print(f"[關鍵字DM] DM 失敗: {result}")
+
+                    # 公開回覆（可選）
+                    if pub_reply:
+                        reply_to_comment(comment_id, pub_reply)
+
+                    dm_replied.add(comment_id)
+                    time.sleep(2)
+                    break  # 一則留言只觸發一次
+
+    _save_dm_replied(dm_replied)
+    print(f"[關鍵字DM] 完成，共發送 {total_dm} 則 DM")
 
 
 def generate_reply(username: str, comment_text: str, post_caption: str = "") -> str:

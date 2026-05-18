@@ -13,11 +13,11 @@ from dotenv import load_dotenv, set_key
 
 load_dotenv(".env", override=True)
 
-APP_ID = os.getenv("FB_APP_ID", "2013829422575032")
-APP_SECRET = os.getenv("FB_APP_SECRET", "cff62074bec4f7a11a75a700398a7806")
-FB_PAGE_ID = os.getenv("FB_PAGE_ID", "100063740869767")
+APP_ID = os.getenv("FB_APP_ID", "857804396816755")
+APP_SECRET = os.getenv("FB_APP_SECRET", "")
+FB_PAGE_ID = os.getenv("FB_PAGE_ID", "1191144084074179")
 REDIRECT_URI = "http://localhost:5001/callback"
-SCOPE = "pages_manage_posts,pages_read_engagement,pages_show_list"
+SCOPE = "pages_manage_posts,pages_read_engagement,pages_show_list,instagram_content_publish"
 
 # 儲存授權碼用
 auth_code = None
@@ -166,10 +166,10 @@ if __name__ == "__main__":
         sys.exit(1)
 
     page_name = page_info.get("name", "未知粉專") if isinstance(page_info, dict) else "?"
-    print(f"\n✅ 粉專「{page_name}」Page Access Token 取得成功！")
+    print(f"\n[OK] Page Access Token for [{page_name}] obtained!")
     print(f"Token: {page_token[:30]}...")
 
     # 6. 寫入 .env
     save_token_to_env(page_token)
-    print("\n✅ 已自動寫入 .env 的 FB_PAGE_TOKEN")
-    print("現在 FB 粉專可以自動發文了！")
+    print("\n[OK] FB_PAGE_TOKEN saved to .env")
+    print("FB page auto-post is ready!")
