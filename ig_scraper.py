@@ -220,6 +220,17 @@ def refresh_1336_topics():
         json.dump(queue, f, ensure_ascii=False, indent=2)
 
     print(f"[ICT Scraper] 儲存 {len(queue['topics'])} 個主題")
+
+    # ── 每週三抓完後，把本次新抓的主題完整列出 ──────────────────────────
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    sep = "=" * 50
+    print(f"\n{sep}")
+    print(f"[ICT Scraper] 本週抓取結果  {now_str}")
+    print(f"本次從 @{ICT_TARGET_ACCT} 分析出 {len(topics)} 個主題：")
+    for i, t in enumerate(topics, 1):
+        print(f"  {i:02d}. {t}")
+    print(sep + "\n")
+
     return True
 
 
