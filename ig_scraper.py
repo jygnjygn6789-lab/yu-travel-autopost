@@ -21,25 +21,46 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() not in ('utf-8', 'utf8'):
 
 
 def _fetch_captions(username: str, count: int) -> list:
-    L = instaloader.Instaloader(
-        download_pictures=False,
-        download_videos=False,
-        download_video_thumbnails=False,
-        download_geotags=False,
-        download_comments=False,
-        save_metadata=False,
-        quiet=True,
-    )
-    # 用帳號登入，避免被 Instagram 封鎖
-    ig_user = os.getenv("SCRAPER_IG_USER", "")
-    ig_pass = os.getenv("SCRAPER_IG_PASS", "")
-    if ig_user and ig_pass:
-        try:
-            L.login(ig_user, ig_pass)
-            print(f"[Scraper] 已登入 @{ig_user}")
-        except Exception as e:
-            print(f"[Scraper] 登入失敗：{e}，嘗試匿名抓取")
+    """
+    用 requests 模擬瀏覽器抓取公開 IG 帳號的貼文 alt text（縮圖描述）。
+    失敗時 fallback 到 instaloader。
+    """
+    import requests
+    from html.parser import HTMLParser
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    }
+
+    # 方法一：requests 直接抓圖片 alt（Instagram 有時會在 meta 或圖片 alt 放 caption）
     try:
+        r = requests.get(f"https://www.instagram.com/{username}/", headers=headers, timeout=15)
+        if r.status_code == 200 and "og:description" in r.text:
+            # 從 meta og:description 取得描述
+            import re as _re
+            metas = _re.findall(r'content="([^"]{30,})"', r.text)
+            captions = [m for m in metas if len(m) > 30][:count]
+            if captions:
+                print(f"[Scraper] requests 方式成功，取得 {len(captions)} 則描述")
+                return captions
+    except Exception as e:
+        print(f"[Scraper] requests 方式失敗：{e}")
+
+    # 方法二：instaloader fallback
+    try:
+        L = instaloader.Instaloader(download_pictures=False, download_videos=False,
+                                     download_video_thumbnails=False, download_geotags=False,
+                                     download_comments=False, save_metadata=False, quiet=True)
+        ig_user = os.getenv("SCRAPER_IG_USER", "")
+        ig_pass = os.getenv("SCRAPER_IG_PASS", "")
+        if ig_user and ig_pass:
+            try:
+                L.login(ig_user, ig_pass)
+                print(f"[Scraper] 已登入 @{ig_user}")
+            except Exception as e:
+                print(f"[Scraper] 登入失敗：{e}")
         profile = instaloader.Profile.from_username(L.context, username)
         captions = []
         for post in profile.get_posts():
@@ -49,7 +70,7 @@ def _fetch_captions(username: str, count: int) -> list:
                 break
         return captions
     except Exception as e:
-        print(f"[Scraper] 抓取失敗：{e}")
+        print(f"[Scraper] instaloader 也失敗：{e}")
         return []
 
 
