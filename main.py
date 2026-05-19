@@ -513,6 +513,20 @@ def run_wycbotai_reel(indicator_name: str = None):
         print(f"[WycBotAI Reel] 發布失敗：{result}")
 
 
+def run_wycbotai_kline():
+    """發布 K 線形態教學輪播（每次隨機選 3 種形態）"""
+    import random
+    from kline_pattern_gen import generate_kline_post, KLINE_PATTERNS
+    keys = random.sample(list(KLINE_PATTERNS.keys()), min(3, len(KLINE_PATTERNS)))
+    print(f"\n[K線] 生成形態：{keys}")
+    slides, caption = generate_kline_post(keys)
+    result = _post_wycbotai_robust(slides, caption, name="wyc_kline")
+    if result.get("id"):
+        print(f"[K線] 發文成功！ID: {result['id']}")
+    else:
+        print(f"[K線] 發文失敗：{result}")
+
+
 def run_wycbotai_ict(topic: str = None):
     """發布 ICT/聰明錢風格輪播（仿 1336cryptoclub 米白風格）"""
     from ict_post_gen import generate_ict_post
@@ -588,6 +602,13 @@ if __name__ == "__main__":
                 s.save(os.path.join(out, f"preview_{i+1}.jpg"), quality=95)
             print(f"已存到 output/preview_1~{len(slides)}.jpg")
             print(f"\nCaption:\n{caption}")
+        elif sys.argv[1] == "kline":
+            # python main.py kline [hammer shooting_star ...]
+            keys = sys.argv[2:] if len(sys.argv) > 2 else None
+            from kline_pattern_gen import generate_kline_post
+            slides, caption = generate_kline_post(keys)
+            result = _post_wycbotai_robust(slides, caption, name="wyc_kline")
+            print(result)
         elif sys.argv[1] == "ict":
             # python main.py ict [主題（可選）]
             indicator_arg = sys.argv[2] if len(sys.argv) > 2 else None
@@ -645,6 +666,7 @@ if __name__ == "__main__":
         schedule.every().day.at("15:00").do(run_daily_reel)
         schedule.every().day.at("19:00").do(run_evening_reel)
         schedule.every().day.at("12:00").do(_wycbotai_daily)
+        schedule.every().day.at("14:00").do(run_wycbotai_kline)
         schedule.every().day.at("15:30").do(run_wycbotai_ict)
         schedule.every().day.at("18:00").do(run_wycbotai_reel)
         schedule.every().wednesday.at("08:00").do(refresh_1336_topics)
