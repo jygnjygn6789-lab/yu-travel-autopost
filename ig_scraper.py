@@ -157,5 +157,100 @@ def refresh_topic_queue():
     return True
 
 
+
+# ── @1336cryptoclub ICT 主題抓取 ──────────────────────────────────────────────
+
+ICT_QUEUE_PATH  = os.path.join(os.path.dirname(__file__), "ict_topic_queue.json")
+ICT_TARGET_ACCT = "1336cryptoclub"
+
+
+def _extract_ict_topics(captions: list) -> list:
+    """讓 Claude 從 @1336cryptoclub 貼文中提取 ICT/聰明錢教學主題"""
+    if not captions:
+        return []
+    client = anthropic.Anthropic()
+    sample = "\n---\n".join(captions[:10])
+    prompt = f"""以下是 @1336cryptoclub（加密貨幣 ICT/聰明錢策略 IG 帳號）最近的貼文摘要：
+
+{sample}
+
+請根據這些貼文的主題方向，列出 8 個適合 WycBotAI 製作教學輪播的加密貨幣技術分析主題。
+要求：
+- 主題要跟 ICT、聰明錢、技術分析相關
+- 每個主題格式：「主題名稱（英文/縮寫）」，例如「訂單塊（Order Block）」「公平價值缺口（FVG）」
+- 繁體中文，具體有教學價值
+- 只回傳 JSON 陣列，不要其他說明：["主題1", "主題2", ...]"""
+
+    msg = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=400,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    raw = msg.content[0].text
+    m = re.search(r'\[.*\]', raw, re.DOTALL)
+    if not m:
+        return []
+    try:
+        return json.loads(m.group())
+    except Exception:
+        return []
+
+
+def refresh_1336_topics():
+    """每週抓 @1336cryptoclub 最新貼文，更新 ICT 主題佇列"""
+    print(f"[ICT Scraper] 抓取 @{ICT_TARGET_ACCT} 最新貼文...")
+    captions = _fetch_captions(ICT_TARGET_ACCT, 12)
+    if not captions:
+        print("[ICT Scraper] 抓取失敗，保留現有佇列")
+        return False
+
+    topics = _extract_ict_topics(captions)
+    if not topics:
+        print("[ICT Scraper] 主題分析失敗")
+        return False
+
+    existing = []
+    if os.path.exists(ICT_QUEUE_PATH):
+        with open(ICT_QUEUE_PATH, "r", encoding="utf-8") as f:
+            existing = json.load(f).get("topics", [])
+
+    combined = topics + [t for t in existing if t not in topics]
+    queue = {"topics": combined[:30], "updated_at": datetime.datetime.now().isoformat()}
+    with open(ICT_QUEUE_PATH, "w", encoding="utf-8") as f:
+        json.dump(queue, f, ensure_ascii=False, indent=2)
+
+    print(f"[ICT Scraper] 儲存 {len(queue['topics'])} 個主題")
+    return True
+
+
+def get_1336_topic() -> str:
+    """
+    從佇列取下一個 ICT 主題（取完一輪後從頭循環）。
+    若佇列不存在，先嘗試 refresh，失敗則回傳 None。
+    """
+    if not os.path.exists(ICT_QUEUE_PATH):
+        refresh_1336_topics()
+
+    if not os.path.exists(ICT_QUEUE_PATH):
+        return None
+
+    with open(ICT_QUEUE_PATH, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    topics = data.get("topics", [])
+    if not topics:
+        return None
+
+    used_idx = data.get("used_idx", 0)
+    topic = topics[used_idx % len(topics)]
+    data["used_idx"] = (used_idx + 1) % len(topics)
+
+    with open(ICT_QUEUE_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+    print(f"[ICT Scraper] 今日主題：{topic}")
+    return topic
+
+
 if __name__ == "__main__":
     refresh_topic_queue()

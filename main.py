@@ -513,6 +513,20 @@ def run_wycbotai_reel(indicator_name: str = None):
         print(f"[WycBotAI Reel] 發布失敗：{result}")
 
 
+def run_wycbotai_ict(topic: str = None):
+    """發布 ICT/聰明錢風格輪播（仿 1336cryptoclub 米白風格）"""
+    from ict_post_gen import generate_ict_post
+    from ig_scraper import get_1336_topic
+    name = topic or get_1336_topic() or "斐波那契回調（Fibonacci Retracement）"
+    print(f"\n[ICT] 生成「{name}」輪播...")
+    slides, caption = generate_ict_post(name)
+    result = _post_wycbotai_robust(slides, caption, name="wyc_ict")
+    if result.get("id"):
+        print(f"[ICT] IG 發文成功！ID: {result['id']}")
+    else:
+        print(f"[ICT] 發文失敗：{result}")
+
+
 def run_wycbotai_alt():
     """週二四六發佈：華爾街金句 or 新手常犯的錯（每週交替）"""
     from wycbotai_alt_gen import get_today_alt_post
@@ -574,6 +588,10 @@ if __name__ == "__main__":
                 s.save(os.path.join(out, f"preview_{i+1}.jpg"), quality=95)
             print(f"已存到 output/preview_1~{len(slides)}.jpg")
             print(f"\nCaption:\n{caption}")
+        elif sys.argv[1] == "ict":
+            # python main.py ict [主題（可選）]
+            indicator_arg = sys.argv[2] if len(sys.argv) > 2 else None
+            run_wycbotai_ict(indicator_arg)
         elif sys.argv[1] == "wycbotai_reel":
             # python main.py wycbotai_reel [指標名稱（可選）]
             indicator_arg = sys.argv[2] if len(sys.argv) > 2 else None
@@ -620,13 +638,16 @@ if __name__ == "__main__":
 
         # 每週一 08:00 自動抓 @japanuts 最新主題
         from ig_scraper import refresh_topic_queue
+        from ig_scraper import refresh_topic_queue, refresh_1336_topics
         schedule.every().monday.at("08:00").do(refresh_topic_queue)
 
         schedule.every().day.at("10:00").do(run_daily_post)
         schedule.every().day.at("15:00").do(run_daily_reel)
         schedule.every().day.at("19:00").do(run_evening_reel)
         schedule.every().day.at("12:00").do(_wycbotai_daily)
+        schedule.every().day.at("15:30").do(run_wycbotai_ict)
         schedule.every().day.at("18:00").do(run_wycbotai_reel)
+        schedule.every().wednesday.at("08:00").do(refresh_1336_topics)
         schedule.every(30).minutes.do(run_comment_bot)
         schedule.every(30).minutes.do(run_keyword_dm_bot)
 
