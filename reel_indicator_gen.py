@@ -92,12 +92,34 @@ def _scene_intro(data: dict) -> Image.Image:
 
     # Hook 問句
     hook = data.get("hook", "你真的懂這個指標嗎？")
-    hook_lines = _wrap(draw, hook, fb(76), W - 120)
-    hy = 600
+    hook_lines = _wrap(draw, hook, fb(84), W - 120)
+    hy = 610
     for line in hook_lines[:2]:
-        bb = draw.textbbox((0,0), line, font=fb(76))
-        draw.text(((W-(bb[2]-bb[0]))//2, hy), line, font=fb(76), fill=WHITE)
-        hy += 96
+        bb = draw.textbbox((0,0), line, font=fb(84))
+        draw.text(((W-(bb[2]-bb[0]))//2, hy), line, font=fb(84), fill=WHITE)
+        hy += 108
+
+    # 三個特色 feature 卡
+    features = [
+        ("📈", "判斷趨勢方向"),
+        ("🎯", "找進出場時機"),
+        ("🛡", "控制風險止損"),
+    ]
+    fy = hy + 60
+    card_w = (W - 108 - 2 * 20) // 3
+    for j, (icon, label) in enumerate(features):
+        fx = 54 + j * (card_w + 20)
+        draw.rounded_rectangle([fx, fy, fx + card_w, fy + 160], radius=16, fill=DIM)
+        # icon
+        bi = draw.textbbox((0,0), icon, font=fb(52))
+        draw.text((fx + (card_w-(bi[2]-bi[0]))//2, fy + 20), icon, font=fb(52), fill=GREEN)
+        # label
+        lbl_lines = _wrap(draw, label, fr(34), card_w - 16)
+        ly = fy + 90
+        for ll in lbl_lines[:2]:
+            bl = draw.textbbox((0,0), ll, font=fr(34))
+            draw.text((fx + (card_w-(bl[2]-bl[0]))//2, ly), ll, font=fr(34), fill=WHITE)
+            ly += 44
 
     # 底部品牌
     draw.line([(0, H-80), (W, H-80)], fill=(*GREEN, 40), width=1)
@@ -140,33 +162,40 @@ def _scene_text(data: dict, scene: dict, color=GREEN) -> Image.Image:
 
     # 場景標題
     title = scene.get("title", "")
-    title_fnt = fb(80)
+    title_fnt = fb(96)
     title_lines = _wrap(draw, title, title_fnt, W - 108)
-    ty = 60
+    ty = 100
     for line in title_lines[:2]:
         draw.text((54, ty), line, font=title_fnt, fill=color)
-        ty += 98
-    draw.line([(54, ty+10), (W-54, ty+10)], fill=(*color, 60), width=2)
+        ty += 118
+    draw.line([(54, ty + 12), (W - 54, ty + 12)], fill=(*color, 60), width=2)
 
-    # 重點條列
+    # 重點條列 — 每個 item 是一個卡片
     points = scene.get("points", [])
-    py = ty + 52
+    py = ty + 60
     for i, pt in enumerate(points[:5]):
-        # 數字圓圈
-        cx, cy = 80, py + 36
-        draw.ellipse([cx-28, cy-28, cx+28, cy+28], fill=color)
-        draw.text((cx-10 if i < 9 else cx-18, cy-20), str(i+1), font=fb(36), fill=BG)
+        # 卡片背景
+        pt_lines = _wrap(draw, pt, fb(58), W - 200)
+        card_h = max(140, len(pt_lines) * 76 + 52)
+        draw.rounded_rectangle([54, py, W - 54, py + card_h], radius=16, fill=DIM)
 
-        pt_lines = _wrap(draw, pt, fb(52), W - 160)
-        lpy = py
+        # 數字圓圈
+        cx, cy = 54 + 52, py + card_h // 2
+        draw.ellipse([cx - 36, cy - 36, cx + 36, cy + 36], fill=color)
+        num_txt = str(i + 1)
+        bb = draw.textbbox((0, 0), num_txt, font=fb(44))
+        draw.text((cx - (bb[2]-bb[0])//2, cy - (bb[3]-bb[1])//2 - 2), num_txt, font=fb(44), fill=BG)
+
+        # 文字
+        lpy = py + (card_h - len(pt_lines) * 76) // 2
         for l in pt_lines[:2]:
-            draw.text((130, lpy), l, font=fb(52), fill=WHITE)
-            lpy += 66
-        py = max(lpy, py + 110) + 24
+            draw.text((160, lpy), l, font=fb(58), fill=WHITE)
+            lpy += 76
+        py += card_h + 28
 
     # 底部品牌
-    draw.line([(0, H-80), (W, H-80)], fill=(*GREEN, 40), width=1)
-    draw.text((54, H-60), "@wycbotai", font=fr(36), fill=(*GREY, 180))
+    draw.line([(0, H - 80), (W, H - 80)], fill=(*GREEN, 40), width=1)
+    draw.text((54, H - 60), "@wycbotai", font=fr(36), fill=(*GREY, 180))
 
     _draw_subtitle(draw, scene.get("subtitle", ""))
     return img

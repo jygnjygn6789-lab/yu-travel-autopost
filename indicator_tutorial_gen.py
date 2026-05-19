@@ -128,8 +128,8 @@ def _slide_definition(data: dict) -> Image.Image:
     draw.text((W - 280, 28), "01", font=fb(160), fill=(*GREEN, 14))
 
     title = data.get("indicator_short", "EMA") + " 是什麼？"
-    draw.text((54, 190), title, font=fb(82), fill=WHITE)
-    draw.line([(54, 290), (600, 290)], fill=GREEN, width=4)
+    draw.text((54, 160), title, font=fb(92), fill=WHITE)
+    draw.line([(54, 270), (600, 270)], fill=GREEN, width=4)
 
     wi = data.get("what_is_it", {})
     headline  = wi.get("headline",  "這個指標幫助你判斷趨勢方向")
@@ -137,22 +137,22 @@ def _slide_definition(data: dict) -> Image.Image:
     bullets   = wi.get("bullets",   [])
 
     if highlight:
-        by = 316
-        draw.rounded_rectangle([54, by, W - 54, by + 92], radius=12, fill=DIM)
-        draw.rounded_rectangle([54, by, 64,     by + 92], radius=4,  fill=GREEN)
-        draw.text((88, by + 26), highlight, font=fb(38), fill=GREEN)
-        y = by + 112
+        by = 296
+        draw.rounded_rectangle([54, by, W - 54, by + 108], radius=12, fill=DIM)
+        draw.rounded_rectangle([54, by, 66,     by + 108], radius=4,  fill=GREEN)
+        draw.text((90, by + 30), highlight, font=fb(44), fill=GREEN)
+        y = by + 132
     else:
-        draw.text((54, 316), headline, font=fr(44), fill=GREY)
-        y = 380
+        draw.text((54, 296), headline, font=fr(48), fill=GREY)
+        y = 364
 
     for bullet in bullets[:5]:
-        draw.ellipse([54, y + 14, 68, y + 28], fill=GREEN)
-        lines = _wrap(draw, bullet, fr(42), W - 120)
+        draw.ellipse([54, y + 18, 72, y + 36], fill=GREEN)
+        lines = _wrap(draw, bullet, fr(48), W - 120)
         for line in lines[:2]:
-            draw.text((88, y), line, font=fr(42), fill=WHITE)
-            y += 60
-        y += 8
+            draw.text((92, y), line, font=fr(48), fill=WHITE)
+            y += 68
+        y += 28
 
     _brand(draw)
     return img
@@ -188,31 +188,31 @@ def _slide_signals(data: dict) -> Image.Image:
 
     # BUY signals
     buy_list = signals.get("buy", [])
-    draw.rounded_rectangle([54, 316, W - 54, 356], radius=8, fill=DIM)
-    draw.rounded_rectangle([54, 316, 64, 356], radius=4, fill=GREEN)
-    draw.text((88, 324), "做多信號", font=fb(30), fill=GREEN)
-    y = 372
+    draw.rounded_rectangle([54, 296, W - 54, 344], radius=8, fill=DIM)
+    draw.rounded_rectangle([54, 296, 66, 344], radius=4, fill=GREEN)
+    draw.text((90, 308), "做多信號", font=fb(34), fill=GREEN)
+    y = 360
     for item in buy_list[:3]:
-        draw.ellipse([60, y + 10, 72, y + 22], fill=GREEN)
-        lines = _wrap(draw, item, fr(40), W - 120)
+        draw.ellipse([60, y + 14, 76, y + 30], fill=GREEN)
+        lines = _wrap(draw, item, fr(46), W - 120)
         for line in lines[:2]:
-            draw.text((88, y), line, font=fr(40), fill=WHITE)
-            y += 55
-        y += 6
+            draw.text((92, y), line, font=fr(46), fill=WHITE)
+            y += 62
+        y += 30
 
-    y += 16
+    y += 20
     # SELL signals
-    draw.rounded_rectangle([54, y, W - 54, y + 40], radius=8, fill=DIM)
-    draw.rounded_rectangle([54, y, 64, y + 40], radius=4, fill=RED)
-    draw.text((88, y + 8), "做空/離場信號", font=fb(30), fill=RED)
-    y += 56
+    draw.rounded_rectangle([54, y, W - 54, y + 48], radius=8, fill=DIM)
+    draw.rounded_rectangle([54, y, 66, y + 48], radius=4, fill=RED)
+    draw.text((90, y + 10), "做空/離場信號", font=fb(34), fill=RED)
+    y += 64
     for item in signals.get("sell", [])[:3]:
-        draw.ellipse([60, y + 10, 72, y + 22], fill=RED)
-        lines = _wrap(draw, item, fr(40), W - 120)
+        draw.ellipse([60, y + 14, 76, y + 30], fill=RED)
+        lines = _wrap(draw, item, fr(46), W - 120)
         for line in lines[:2]:
-            draw.text((88, y), line, font=fr(40), fill=WHITE)
-            y += 55
-        y += 6
+            draw.text((92, y), line, font=fr(46), fill=WHITE)
+            y += 62
+        y += 30
 
     _brand(draw)
     return img
@@ -239,27 +239,22 @@ def _slide_timeframes(data: dict) -> Image.Image:
                      (80, 180, 255)),
     ]
 
-    y = 432
+    y = 420
     for label, tf, desc, color in rows:
-        # row card
-        draw.rounded_rectangle([54, y, W - 54, y + 140], radius=14, fill=DIM)
-        # left color bar
-        draw.rounded_rectangle([54, y, 66, y + 140], radius=4, fill=color)
-        # label
-        draw.text((88, y + 14), label, font=fr(30), fill=GREY)
-        # timeframe (big)
-        draw.text((88, y + 50), tf, font=fb(54), fill=color)
-        # desc
-        desc_lines = _wrap(draw, desc, fr(36), W - 200)
-        dy = y + 100
+        draw.rounded_rectangle([54, y, W - 54, y + 188], radius=14, fill=DIM)
+        draw.rounded_rectangle([54, y, 68, y + 188], radius=4, fill=color)
+        draw.text((92, y + 16), label, font=fr(34), fill=GREY)
+        draw.text((92, y + 58), tf, font=fb(62), fill=color)
+        desc_lines = _wrap(draw, desc, fr(42), W - 200)
+        dy = y + 130
         for line in desc_lines[:1]:
-            draw.text((88, dy), line, font=fr(36), fill=WHITE)
-        y += 158
+            draw.text((92, dy), line, font=fr(42), fill=WHITE)
+        y += 208
 
     # tip
     tip = tf_data.get("tip", "由大到小：先看方向，再找進場，最後確認")
     draw.line([(54, y + 8), (W - 54, y + 8)], fill=(*GREEN, 30), width=1)
-    draw.text((54, y + 20), tip, font=fr(36), fill=(*GREY, 200))
+    draw.text((54, y + 20), tip, font=fr(40), fill=(*GREY, 200))
 
     _brand(draw)
     return img
@@ -274,28 +269,26 @@ def _slide_mistakes(data: dict) -> Image.Image:
     draw.line([(54, 392), (560, 392)], fill=RED, width=4)
 
     mistakes = data.get("mistakes", [])
-    y = 424
+    y = 408
     for i, mistake in enumerate(mistakes[:3]):
-        # number circle
         nx, ny = 54, y
-        draw.ellipse([nx, ny, nx + 52, ny + 52], fill=RED)
-        draw.text((nx + 16, ny + 8), str(i + 1), font=fb(32), fill=WHITE)
+        draw.ellipse([nx, ny, nx + 64, ny + 64], fill=RED)
+        draw.text((nx + 18, ny + 10), str(i + 1), font=fb(40), fill=WHITE)
 
-        lines = _wrap(draw, mistake, fb(46), W - 140)
-        ty = y + 2
+        lines = _wrap(draw, mistake, fb(52), W - 148)
+        ty = y
         for line in lines[:2]:
-            draw.text((120, ty), line, font=fb(46), fill=WHITE)
-            ty += 60
+            draw.text((132, ty), line, font=fb(52), fill=WHITE)
+            ty += 68
 
-        # sub-detail if provided in extended data
         detail = data.get("mistake_details", [None, None, None])[i]
         if detail:
-            dlines = _wrap(draw, detail, fr(36), W - 140)
+            dlines = _wrap(draw, detail, fr(42), W - 148)
             for dl in dlines[:2]:
-                draw.text((120, ty), dl, font=fr(36), fill=GREY)
-                ty += 50
+                draw.text((132, ty), dl, font=fr(42), fill=GREY)
+                ty += 56
 
-        y = max(ty, y + 140) + 24
+        y = max(ty, y + 160) + 36
 
     _brand(draw)
     return img
