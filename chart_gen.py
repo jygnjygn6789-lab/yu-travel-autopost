@@ -390,6 +390,70 @@ def draw_kd_chart(candles=None, width=1080, height=760):
     return img
 
 
+# ── 動畫幀生成 ────────────────────────────────────────────────────────────────
+
+def get_chart_frames(indicator_name: str, width=1072, height=720,
+                     n_frames=48, start_ratio=0.2) -> list:
+    """
+    回傳 n_frames 張漸進顯示 K 線的 PIL Image 列表。
+    每幀使用部分蠟燭插值（最後一根蠟燭從無到完整逐幀生長），
+    讓動畫比單純 candle-by-candle 更順暢。
+    """
+    name_up = indicator_name.upper()
+    candles = SAMPLE_CANDLES
+    n       = len(candles)
+
+    fn = draw_ema_chart
+    for keys, f in _CHART_MAP_DATA:
+        if any(k.upper() in name_up for k in keys):
+            fn = f
+            break
+
+    # 起始 candle 數
+    n_start = max(1, int(n * start_ratio))
+    # 動畫跑完後顯示全部 candles；浮點 index 從 n_start-1 → n-1
+    frames = []
+    for i in range(n_frames):
+        progress = i / max(n_frames - 1, 1)
+        f_idx    = (n_start - 1) + (n - n_start) * progress   # 浮點 candle index
+        n_full   = int(f_idx)                                  # 完整顯示到第 n_full 根
+        partial  = f_idx - n_full                              # 最後一根的生長比例 0~1
+
+        n_full = min(n_full, n - 1)
+
+        if partial > 0.01 and n_full + 1 < n:
+            # 最後一根蠟燭依 partial 比例從 prev_close 往目標生長
+            prev_close = candles[n_full - 1][3] if n_full > 0 else candles[0][0]
+            o, h, l, c, v = candles[n_full]
+            # open/close 從 prev_close 插值
+            o_p = prev_close + (o - prev_close) * partial
+            c_p = prev_close + (c - prev_close) * partial
+            # high/low 也插值（wick 同樣跟著長）
+            h_p = prev_close + (h - prev_close) * partial
+            l_p = prev_close + (l - prev_close) * partial
+            # 確保 OHLC 邏輯合法
+            h_p = max(h_p, max(o_p, c_p))
+            l_p = min(l_p, min(o_p, c_p))
+            partial_candle = (o_p, h_p, l_p, c_p, int(v * partial))
+            show = list(candles[:n_full]) + [partial_candle]
+        else:
+            show = list(candles[:n_full + 1])
+
+        frame = fn(candles=show, width=width, height=height)
+        frames.append(frame)
+    return frames
+
+
+_CHART_MAP_DATA = [
+    (["EMA", "均線", "移動平均"],      draw_ema_chart),
+    (["RSI", "強弱", "超買", "超賣"],  draw_rsi_chart),
+    (["MACD", "收斂", "發散"],         draw_macd_chart),
+    (["布林", "BOLLINGER"],            draw_bollinger_chart),
+    (["成交量", "VOLUME"],             draw_volume_chart),
+    (["KD", "隨機", "STOCH"],          draw_kd_chart),
+]
+
+
 # ── dispatcher ───────────────────────────────────────────────────────────────
 
 _CHART_MAP = [

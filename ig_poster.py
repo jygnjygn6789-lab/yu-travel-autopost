@@ -12,6 +12,10 @@ IG_USER_ID = os.getenv("IG_USER_ID")
 ACCESS_TOKEN = os.getenv("IG_ACCESS_TOKEN")
 BASE_URL = "https://graph.instagram.com/v21.0"
 
+# WycBotAI 專用帳號（連結到 Wyvbotai FB 粉專，使用 FB_PAGE_TOKEN 發文）
+WYCBOTAI_IG_USER_ID = os.getenv("WYCBOTAI_IG_USER_ID")
+FB_BASE_URL = "https://graph.facebook.com/v21.0"
+
 
 def refresh_token_if_needed():
     """檢查並刷新 token（長效 token 有效期 60 天）"""
@@ -311,3 +315,133 @@ def get_account_info() -> dict:
     }
     resp = requests.get(url, params=params)
     return resp.json()
+
+
+def post_wycbotai_reel(video_url: str, caption: str) -> dict:
+    """
+    用 FB_PAGE_TOKEN 發布 Reel 到 WycBotAI IG 帳號
+    video_url: 公開可存取的 .mp4 URL
+    """
+    import time
+    token = os.getenv("FB_PAGE_TOKEN")
+    ig_id = os.getenv("WYCBOTAI_IG_USER_ID")
+
+    if not ig_id:
+        return {"error": "WYCBOTAI_IG_USER_ID 未設定"}
+    if not token:
+        return {"error": "FB_PAGE_TOKEN 未設定"}
+
+    resp = requests.post(
+        f"{FB_BASE_URL}/{ig_id}/media",
+        data={
+            "video_url": video_url,
+            "media_type": "REELS",
+            "caption": caption,
+            "share_to_feed": "true",
+            "access_token": token,
+        },
+    )
+    result = resp.json()
+    if "id" not in result:
+        print(f"建立 WycBotAI Reel 容器失敗: {result}")
+        return result
+
+    container_id = result["id"]
+    print(f"WycBotAI Reel 容器建立成功: {container_id}")
+
+    for _ in range(24):
+        time.sleep(10)
+        status = requests.get(
+            f"{FB_BASE_URL}/{container_id}",
+            params={"fields": "status_code", "access_token": token},
+        ).json().get("status_code", "")
+        print(f"WycBotAI Reel 處理狀態: {status}")
+        if status == "FINISHED":
+            break
+        elif status == "ERROR":
+            return {"error": "Reel 影片處理失敗"}
+
+    pub = requests.post(
+        f"{FB_BASE_URL}/{ig_id}/media_publish",
+        data={"creation_id": container_id, "access_token": token},
+    ).json()
+
+    if "id" in pub:
+        print(f"WycBotAI Reel 發布成功！Post ID: {pub['id']}")
+    else:
+        print(f"WycBotAI Reel 發布失敗: {pub}")
+
+    return pub
+
+
+def post_wycbotai_carousel(image_urls: list, caption: str) -> dict:
+    """
+    用 FB_PAGE_TOKEN 發布輪播到 WycBotAI IG 帳號（WYCBOTAI_IG_USER_ID）
+    """
+    import time
+    token = os.getenv("FB_PAGE_TOKEN")
+    ig_id = os.getenv("WYCBOTAI_IG_USER_ID")
+
+    if not ig_id:
+        return {"error": "WYCBOTAI_IG_USER_ID 未設定，請執行 get_fb_token.py"}
+    if not token:
+        return {"error": "FB_PAGE_TOKEN 未設定"}
+
+    # Step 1: 建立每張圖的媒體容器
+    container_ids = []
+    for i, url in enumerate(image_urls):
+        resp = requests.post(
+            f"{FB_BASE_URL}/{ig_id}/media",
+            data={"image_url": url, "is_carousel_item": "true", "access_token": token},
+        )
+        result = resp.json()
+        if "id" not in result:
+            print(f"輪播項目 {i+1} 建立失敗: {result}")
+            return result
+        container_ids.append(result["id"])
+        print(f"輪播項目 {i+1}/{len(image_urls)} 建立成功: {result['id']}")
+
+    # Step 2: 建立輪播容器
+    time.sleep(3)
+    resp = requests.post(
+        f"{FB_BASE_URL}/{ig_id}/media",
+        data={
+            "media_type": "CAROUSEL",
+            "caption": caption,
+            "children": ",".join(container_ids),
+            "access_token": token,
+        },
+    )
+    result = resp.json()
+    if "id" not in result:
+        print(f"輪播容器建立失敗: {result}")
+        return result
+
+    carousel_id = result["id"]
+    print(f"輪播容器建立成功: {carousel_id}")
+
+    # Step 3: 等待處理完成
+    for _ in range(12):
+        time.sleep(5)
+        status = requests.get(
+            f"{FB_BASE_URL}/{carousel_id}",
+            params={"fields": "status_code", "access_token": token},
+        ).json().get("status_code", "")
+        print(f"輪播處理狀態: {status}")
+        if status == "FINISHED":
+            break
+        elif status == "ERROR":
+            return {"error": "圖片處理失敗"}
+
+    # Step 4: 發布
+    pub = requests.post(
+        f"{FB_BASE_URL}/{ig_id}/media_publish",
+        data={"creation_id": carousel_id, "access_token": token},
+    ).json()
+
+    if "id" in pub:
+        print(f"WycBotAI 輪播發布成功！Post ID: {pub['id']}")
+    else:
+        print(f"WycBotAI 輪播發布失敗: {pub}")
+
+    return pub

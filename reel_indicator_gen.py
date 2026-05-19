@@ -1,0 +1,548 @@
+"""
+WycBotAI 技術指標教學 Reel 生成器
+風格：暗色背景 + K線圖 + 字幕逐句同步配音
+每支約 40-50 秒，1080x1920 直式
+"""
+import os, re, json, asyncio, tempfile, datetime
+import anthropic
+from PIL import Image, ImageDraw, ImageFont
+from dotenv import load_dotenv
+
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=True)
+
+from font_paths import FONT_BOLD, FONT_REG
+from chart_gen import get_chart, get_chart_frames
+
+W, H = 1080, 1920
+BG    = (8,  13,  30)
+GREEN = (0,  255, 136)
+GOLD  = (255, 215,   0)
+RED   = (255,  68,  68)
+WHITE = (255, 255, 255)
+GREY  = (136, 153, 170)
+DIM   = (22,  33,  58)
+
+def fb(s): return ImageFont.truetype(FONT_BOLD, s)
+def fr(s): return ImageFont.truetype(FONT_REG,  s)
+
+
+# ── 字幕換行 ──────────────────────────────────────────────────────────────────
+
+def _wrap(draw, text, font, max_w):
+    lines, cur = [], ""
+    for ch in text:
+        test = cur + ch
+        if draw.textbbox((0,0), test, font=font)[2] > max_w and cur:
+            lines.append(cur); cur = ch
+        else:
+            cur = test
+    if cur: lines.append(cur)
+    return lines
+
+
+# ── 場景畫面生成 ───────────────────────────────────────────────────────────────
+
+def _base_canvas():
+    img = Image.new("RGB", (W, H), BG)
+    draw = ImageDraw.Draw(img)
+    for x in range(60, W, 108):
+        for y in range(60, H, 108):
+            draw.ellipse([x-1,y-1,x+1,y+1], fill=(255,255,255,6))
+    return img, draw
+
+
+def _draw_subtitle(draw, text, y_start=1580):
+    """底部字幕區：大字白色，背景半透明"""
+    fnt = fb(68)
+    lines = _wrap(draw, text, fnt, W - 80)
+    # 背景遮罩
+    total_h = len(lines) * 88 + 32
+    draw.rectangle([0, y_start - 16, W, y_start + total_h], fill=(0,0,0,160))
+    y = y_start
+    for line in lines[:3]:
+        bb = draw.textbbox((0,0), line, font=fnt)
+        x = (W - (bb[2]-bb[0])) // 2
+        # 文字陰影
+        draw.text((x+2, y+2), line, font=fnt, fill=(0,0,0,200))
+        draw.text((x, y), line, font=fnt, fill=WHITE)
+        y += 88
+
+
+def _scene_intro(data: dict) -> Image.Image:
+    """封面場景：大指標名 + hook"""
+    img, draw = _base_canvas()
+
+    # 頂部細線
+    draw.line([(0, 8), (W, 8)], fill=GREEN, width=4)
+
+    # 大指標縮寫
+    short = data["indicator_short"]
+    fnt_big = fb(220)
+    bb = draw.textbbox((0,0), short, font=fnt_big)
+    x = (W - (bb[2]-bb[0])) // 2
+    draw.text((x+4, 204), short, font=fnt_big, fill=(*GREEN, 30))  # 暗影
+    draw.text((x, 200), short, font=fnt_big, fill=GREEN)
+
+    # 全名
+    full = data.get("indicator_full", "")
+    bb2 = draw.textbbox((0,0), full, font=fr(52))
+    draw.text(((W-(bb2[2]-bb2[0]))//2, 480), full, font=fr(52), fill=GREY)
+
+    draw.line([(120, 560), (W-120, 560)], fill=(*GREEN, 60), width=1)
+
+    # Hook 問句
+    hook = data.get("hook", "你真的懂這個指標嗎？")
+    hook_lines = _wrap(draw, hook, fb(76), W - 120)
+    hy = 600
+    for line in hook_lines[:2]:
+        bb = draw.textbbox((0,0), line, font=fb(76))
+        draw.text(((W-(bb[2]-bb[0]))//2, hy), line, font=fb(76), fill=WHITE)
+        hy += 96
+
+    # 底部品牌
+    draw.line([(0, H-80), (W, H-80)], fill=(*GREEN, 40), width=1)
+    draw.text((54, H-60), "@wycbotai", font=fr(36), fill=(*GREY, 180))
+    draw.text((W-300, H-60), "wycbotai.com", font=fr(36), fill=(*GREEN, 160))
+
+    _draw_subtitle(draw, data.get("scenes", [{}])[0].get("subtitle", ""))
+    return img
+
+
+def _scene_chart(data: dict, indicator_name: str, subtitle: str) -> Image.Image:
+    """K線圖場景"""
+    img, draw = _base_canvas()
+
+    # 頂部標題
+    draw.line([(0, 8), (W, 8)], fill=GREEN, width=4)
+    draw.text((54, 28), data["indicator_short"], font=fb(72), fill=GREEN)
+    caption = data.get("chart_caption", "實際K線圖解")
+    draw.text((54, 116), caption, font=fr(44), fill=GREY)
+    draw.line([(54, 174), (W-54, 174)], fill=(*GREEN, 40), width=1)
+
+    # K線圖
+    chart_h = 960
+    chart = get_chart(indicator_name, width=W-8, height=chart_h)
+    img.paste(chart, (4, 190))
+
+    # 底部品牌
+    draw.line([(0, H-80), (W, H-80)], fill=(*GREEN, 40), width=1)
+    draw.text((54, H-60), "@wycbotai", font=fr(36), fill=(*GREY, 180))
+
+    _draw_subtitle(draw, subtitle)
+    return img
+
+
+def _scene_text(data: dict, scene: dict, color=GREEN) -> Image.Image:
+    """文字說明場景：大標題 + 重點條列"""
+    img, draw = _base_canvas()
+
+    draw.line([(0, 8), (W, 8)], fill=color, width=4)
+
+    # 場景標題
+    title = scene.get("title", "")
+    title_fnt = fb(80)
+    title_lines = _wrap(draw, title, title_fnt, W - 108)
+    ty = 60
+    for line in title_lines[:2]:
+        draw.text((54, ty), line, font=title_fnt, fill=color)
+        ty += 98
+    draw.line([(54, ty+10), (W-54, ty+10)], fill=(*color, 60), width=2)
+
+    # 重點條列
+    points = scene.get("points", [])
+    py = ty + 52
+    for i, pt in enumerate(points[:5]):
+        # 數字圓圈
+        cx, cy = 80, py + 36
+        draw.ellipse([cx-28, cy-28, cx+28, cy+28], fill=color)
+        draw.text((cx-10 if i < 9 else cx-18, cy-20), str(i+1), font=fb(36), fill=BG)
+
+        pt_lines = _wrap(draw, pt, fb(52), W - 160)
+        lpy = py
+        for l in pt_lines[:2]:
+            draw.text((130, lpy), l, font=fb(52), fill=WHITE)
+            lpy += 66
+        py = max(lpy, py + 110) + 24
+
+    # 底部品牌
+    draw.line([(0, H-80), (W, H-80)], fill=(*GREEN, 40), width=1)
+    draw.text((54, H-60), "@wycbotai", font=fr(36), fill=(*GREY, 180))
+
+    _draw_subtitle(draw, scene.get("subtitle", ""))
+    return img
+
+
+def _scene_cross(data: dict, cross_type: str, subtitle: str) -> Image.Image:
+    """
+    黃金交叉 / 死亡交叉 示意圖：
+    cross_type = "golden" or "death"
+    """
+    import math
+    img, draw = _base_canvas()
+    is_golden = cross_type == "golden"
+    accent = GREEN if is_golden else RED
+    label  = "黃金交叉" if is_golden else "死亡交叉"
+    signal = "▲  買入信號" if is_golden else "▼  賣出信號"
+
+    draw.line([(0, 8), (W, 8)], fill=accent, width=4)
+    draw.text((54, 28), data["indicator_short"], font=fb(72), fill=GREEN)
+    draw.text((54, 116), label, font=fb(56), fill=accent)
+    draw.line([(54, 188), (W-54, 188)], fill=(*accent, 50), width=1)
+
+    # ── 示意圖區域 ───────────────────────────────────────────────────────
+    CX, CY = W // 2, 700          # 交叉點中心
+    LW = 380                      # 線條半寬
+    THICK = 10
+
+    def curve_y(x, slope, base_y, curve=0.0003):
+        """從交叉點往兩側彎曲"""
+        return base_y + slope * x + curve * x * x
+
+    pts_short, pts_long = [], []
+    for dx in range(-LW, LW + 1, 4):
+        if is_golden:
+            # 黃金交叉：短期線從下穿上
+            ys = curve_y(dx, -0.25,  CY, -0.0002)
+            yl = curve_y(dx,  0.20,  CY,  0.0002)
+        else:
+            # 死亡交叉：短期線從上穿下
+            ys = curve_y(dx,  0.25, CY,  0.0002)
+            yl = curve_y(dx, -0.20, CY, -0.0002)
+        pts_short.append((CX + dx, int(ys)))
+        pts_long.append((CX  + dx, int(yl)))
+
+    # 畫長期線（灰藍）
+    for j in range(len(pts_long) - 1):
+        draw.line([pts_long[j], pts_long[j+1]], fill=(100, 160, 255), width=THICK)
+    # 畫短期線（金）
+    for j in range(len(pts_short) - 1):
+        draw.line([pts_short[j], pts_short[j+1]], fill=GOLD, width=THICK)
+
+    # 交叉圓點
+    r = 22
+    draw.ellipse([CX-r, CY-r, CX+r, CY+r], fill=accent, outline=WHITE, width=3)
+
+    # 標籤
+    draw.text((CX + LW - 110, pts_short[-1][1] - 50), "短期 EMA", font=fr(38), fill=GOLD)
+    draw.text((CX + LW - 110, pts_long[-1][1]  + 10), "長期 EMA", font=fr(38), fill=(100, 160, 255))
+
+    # 方向箭頭 + 信號說明
+    arrow_y = CY + (240 if is_golden else -280)
+    # 框框：深色背景 + 彩色邊框，文字用白色確保可讀
+    box_fill = (0, 60, 30) if is_golden else (60, 10, 10)
+    draw.rounded_rectangle([120, arrow_y, W-120, arrow_y+120], radius=24,
+                            fill=box_fill, outline=accent, width=4)
+    bb = draw.textbbox((0,0), signal, font=fb(64))
+    draw.text(((W-(bb[2]-bb[0]))//2, arrow_y+22), signal, font=fb(64), fill=WHITE)
+
+    # 說明文字
+    desc = "短期均線上穿長期均線" if is_golden else "短期均線下穿長期均線"
+    desc2 = "趨勢轉強，動能向上" if is_golden else "趨勢轉弱，動能向下"
+    bb2 = draw.textbbox((0,0), desc, font=fr(44))
+    draw.text(((W-(bb2[2]-bb2[0]))//2, arrow_y+150), desc, font=fr(44), fill=WHITE)
+    bb3 = draw.textbbox((0,0), desc2, font=fr(40))
+    draw.text(((W-(bb3[2]-bb3[0]))//2, arrow_y+208), desc2, font=fr(40), fill=GREY)
+
+    # 底部品牌
+    draw.line([(0, H-80), (W, H-80)], fill=(*GREEN, 40), width=1)
+    draw.text((54, H-60), "@wycbotai", font=fr(36), fill=(*GREY, 180))
+
+    _draw_subtitle(draw, subtitle)
+    return img
+
+
+def _scene_cta(data: dict, subtitle: str) -> Image.Image:
+    """CTA 結尾場景"""
+    img, draw = _base_canvas()
+
+    draw.line([(0, 8), (W, 8)], fill=GREEN, width=4)
+
+    draw.text((54, 80),  "學會了嗎？",      font=fb(96),  fill=WHITE)
+    draw.text((54, 196), "每天一個指標，",   font=fb(76),  fill=WHITE)
+    draw.text((54, 292), "30天成為技術達人", font=fb(72),  fill=GREEN)
+    draw.line([(54, 400), (W-54, 400)], fill=(*GREEN, 50), width=1)
+
+    feats = [
+        "AI 每日掃描 EMA / RSI / ADX 信號",
+        "自動計算止損止盈比例",
+        "新手也能看懂的策略報告",
+    ]
+    fy = 440
+    for feat in feats:
+        draw.text((54,  fy), ">>", font=fb(48), fill=GREEN)
+        draw.text((130, fy), feat, font=fr(48), fill=WHITE)
+        fy += 80
+
+    # 留言 CTA
+    draw.line([(54, fy+20), (W-54, fy+20)], fill=(*GREEN, 40), width=1)
+    kw = data.get("indicator_short", "EMA")
+    draw.text((54, fy+50),  "留言",          font=fr(48),  fill=GREY)
+    draw.text((54, fy+110), kw,              font=fb(80),  fill=GREEN)
+    draw.text((54, fy+200), "我傳策略連結給你", font=fr(48), fill=WHITE)
+
+    # CTA 按鈕
+    by = H - 340
+    draw.rounded_rectangle([54, by, W-54, by+110], radius=55, fill=GREEN)
+    btn_txt = "前往 wycbotai.com 免費體驗"
+    bb = draw.textbbox((0,0), btn_txt, font=fb(48))
+    draw.text(((W-(bb[2]-bb[0]))//2, by+28), btn_txt, font=fb(48), fill=BG)
+
+    draw.text((54, H-200), "追蹤 @wycbotai 每天學一個指標", font=fr(40), fill=GREY)
+    draw.line([(0, H-80), (W, H-80)], fill=(*GREEN, 40), width=1)
+    draw.text((54, H-60), "@wycbotai", font=fr(36), fill=(*GREY, 180))
+
+    _draw_subtitle(draw, subtitle)
+    return img
+
+
+# ── Claude 腳本生成 ────────────────────────────────────────────────────────────
+
+def _generate_script(indicator_name: str) -> dict:
+    client = anthropic.Anthropic()
+    prompt = f"""你是台灣頂尖加密貨幣教育創作者，為 WycBotAI 生成「{indicator_name}」Reel 腳本。
+
+目標：讓完全不懂技術分析的新手，看完 45 秒後立刻懂這個指標並想追蹤帳號
+風格：口語化、有節奏感、用對比和懸念吸引人繼續看、不用術語解釋術語
+語言：繁體中文，像 Podcast 主持人在說話，自然流暢
+
+嚴格回傳 JSON，不要任何多餘文字：
+{{
+  "indicator_short": "指標縮寫（如 EMA）",
+  "indicator_full": "指標完整中文名",
+  "hook": "開場問句，讓人想繼續看（20字以內）",
+  "chart_caption": "K線圖說明（20字以內）",
+  "narration": "完整連貫旁白，約100-120字，自然口語，像主持人在說話，句與句之間用，或。銜接，不要分段",
+  "scenes": [
+    {{
+      "type": "intro",
+      "subtitle": "對應旁白前20字左右（直接從 narration 第一句截取）"
+    }},
+    {{
+      "type": "chart",
+      "subtitle": "對應旁白中段看圖部分（20-25字）"
+    }},
+    {{
+      "type": "text",
+      "title": "場景標題（10字以內）",
+      "points": ["重點1（20字以內）", "重點2", "重點3"],
+      "subtitle": "對應旁白這段的內容（20-25字）"
+    }},
+    {{
+      "type": "text",
+      "title": "常見錯誤",
+      "points": ["錯誤1（20字以內）", "錯誤2", "錯誤3"],
+      "subtitle": "對應旁白這段的內容（20-25字）"
+    }},
+    // 若指標有「黃金交叉」概念，加入這兩個場景（否則省略）：
+    {{
+      "type": "cross_golden",
+      "subtitle": "旁白中提到黃金交叉那句話（15-20字）"
+    }},
+    {{
+      "type": "cross_death",
+      "subtitle": "旁白中提到死亡交叉那句話（15-20字）"
+    }},
+    {{
+      "type": "cta",
+      "subtitle": "對應旁白結尾呼籲行動部分（15-20字）"
+    }}
+  ],
+  "caption": "IG 貼文文案（繁中，150-200字，含3-5個hashtag）"
+}}"""
+
+    msg = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=2000,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    raw = msg.content[0].text
+    m = re.search(r'\{.*\}', raw, re.DOTALL)
+    if not m:
+        return {}
+    try:
+        return json.loads(m.group())
+    except Exception:
+        cleaned = re.sub(r',\s*([}\]])', r'\1', m.group())
+        return json.loads(cleaned)
+
+
+# ── TTS 語音生成 ───────────────────────────────────────────────────────────────
+
+async def _tts_with_boundaries(text: str, audio_path: str, voice: str) -> list:
+    """一次生成完整語音，並回傳每個詞的時間戳（秒）"""
+    import edge_tts
+    communicate = edge_tts.Communicate(text, voice, rate="-8%", pitch="+2Hz")
+    boundaries = []
+    with open(audio_path, "wb") as f:
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                f.write(chunk["data"])
+            elif chunk["type"] == "WordBoundary":
+                boundaries.append({
+                    "text":   chunk["text"],
+                    "offset": chunk["offset"] / 10_000_000,   # 100ns → sec
+                    "end":    (chunk["offset"] + chunk["duration"]) / 10_000_000,
+                })
+    return boundaries
+
+
+def _tts_full(narration: str, audio_path: str, voice: str) -> list:
+    return asyncio.run(_tts_with_boundaries(narration, audio_path, voice))
+
+
+def _audio_duration(path: str) -> float:
+    from moviepy import AudioFileClip
+    with AudioFileClip(path) as a:
+        return a.duration
+
+
+def _sentence_timings(total_dur: float, subtitles: list) -> list:
+    """
+    按字數比例把總時長分配給每個場景
+    """
+    if not subtitles:
+        return []
+    total_chars = sum(len(s) for s in subtitles)
+    if total_chars == 0:
+        dur_each = total_dur / len(subtitles)
+        return [(i * dur_each, (i + 1) * dur_each) for i in range(len(subtitles))]
+
+    timings, cursor = [], 0.0
+    for s in subtitles:
+        dur = total_dur * (len(s) / total_chars)
+        timings.append((cursor, cursor + dur))
+        cursor += dur
+    return timings
+
+
+# ── 影片合成 ───────────────────────────────────────────────────────────────────
+
+def _pil_to_np(img: Image.Image):
+    import numpy as np
+    return np.array(img.convert("RGB"))
+
+
+def generate_indicator_reel(indicator_name: str = None, voice="zh-TW-YunJheNeural") -> tuple:
+    """
+    生成指標教學 Reel（單一連續語音 + crossfade 轉場）
+    回傳 (video_path: str, caption: str)
+    """
+    from indicator_tutorial_gen import get_today_indicator
+    from moviepy import ImageClip, AudioFileClip, concatenate_videoclips, ImageSequenceClip
+    from moviepy import vfx
+
+    if indicator_name is None:
+        indicator_name = get_today_indicator()
+
+    print(f"[Reel] 生成「{indicator_name}」腳本...")
+    data = _generate_script(indicator_name)
+    if not data:
+        raise RuntimeError("Claude 腳本生成失敗")
+
+    scenes    = data.get("scenes", [])
+    narration = data.get("narration", "。".join(s.get("subtitle","") for s in scenes))
+    out_dir   = os.path.join(os.path.dirname(__file__), "output")
+    os.makedirs(out_dir, exist_ok=True)
+
+    # ── 1. 一次生成完整語音 ──────────────────────────────────────────────────
+    audio_path = os.path.join(out_dir, "reel_full_narration.mp3")
+    print(f"[Reel] TTS 完整旁白生成中（{len(narration)} 字）...")
+    _tts_full(narration, audio_path, voice)
+    total_dur = _audio_duration(audio_path)
+    print(f"[Reel] 語音總長：{total_dur:.1f} 秒")
+
+    # ── 2. 計算每個場景的時間區段（依字數比例）──────────────────────────────────
+    subtitles = [s.get("subtitle", "") for s in scenes]
+    timings   = _sentence_timings(total_dur, subtitles)
+
+    # ── 3. 為每個場景建立純視覺片段（不帶音訊）──────────────────────────────────
+    FADE = 0.3   # fade to/from black 秒數
+    CHART_FPS = 24
+    clips = []
+
+    for i, (scene, (t_start, t_end)) in enumerate(zip(scenes, timings)):
+        subtitle = scene.get("subtitle", "")
+        stype    = scene.get("type", "text")
+        dur      = max(t_end - t_start, 1.5)
+
+        print(f"[Reel] 場景 {i+1}/{len(scenes)}：{stype} [{t_start:.1f}s-{t_end:.1f}s]")
+
+        if stype == "chart":
+            N_FRAMES = max(24, int(dur * CHART_FPS))
+            chart_frames = get_chart_frames(indicator_name, width=W-8, height=960, n_frames=N_FRAMES)
+            chart_imgs = []
+            for cf in chart_frames:
+                base, draw = _base_canvas()
+                draw.line([(0, 8), (W, 8)], fill=GREEN, width=4)
+                draw.text((54, 28), data["indicator_short"], font=fb(72), fill=GREEN)
+                caption_text = data.get("chart_caption", "實際K線圖解")
+                draw.text((54, 116), caption_text, font=fr(44), fill=GREY)
+                draw.line([(54, 174), (W-54, 174)], fill=(*GREEN, 40), width=1)
+                base.paste(cf, (4, 190))
+                draw.line([(0, H-80), (W, H-80)], fill=(*GREEN, 40), width=1)
+                draw.text((54, H-60), "@wycbotai", font=fr(36), fill=(*GREY, 180))
+                _draw_subtitle(draw, subtitle)
+                chart_imgs.append(_pil_to_np(base))
+            clip = ImageSequenceClip(chart_imgs, fps=CHART_FPS)
+        else:
+            if stype == "intro":
+                frame = _scene_intro(data)
+            elif stype == "cross_golden":
+                frame = _scene_cross(data, "golden", subtitle)
+            elif stype == "cross_death":
+                frame = _scene_cross(data, "death", subtitle)
+            elif stype == "cta":
+                frame = _scene_cta(data, subtitle)
+            else:
+                color = RED if "錯誤" in scene.get("title", "") else GREEN
+                frame = _scene_text(data, scene, color=color)
+            clip = ImageClip(_pil_to_np(frame), duration=dur)
+
+        # FadeIn/FadeOut（暗→畫面→暗），不依賴 alpha channel
+        effects = []
+        if i > 0:
+            effects.append(vfx.FadeIn(FADE))
+        if i < len(scenes) - 1:
+            effects.append(vfx.FadeOut(FADE))
+        if effects:
+            clip = clip.with_effects(effects)
+
+        clips.append(clip)
+
+    # ── 4. 合成視覺，再疊上完整連續音訊 ──────────────────────────────────────
+    print(f"[Reel] 合成影片...")
+    video_only = concatenate_videoclips(clips, method="chain")
+    full_audio = AudioFileClip(audio_path)
+    # 音訊若比影片長則截短，短則影片延長靜音
+    audio_fit  = full_audio.subclipped(0, min(full_audio.duration, video_only.duration))
+    final = video_only.with_audio(audio_fit)
+
+    video_path = os.path.join(out_dir, f"reel_{indicator_name.split('（')[0]}.mp4")
+    final.write_videofile(
+        video_path,
+        fps=24,
+        codec="libx264",
+        audio_codec="aac",
+        temp_audiofile=os.path.join(out_dir, "temp_audio.m4a"),
+        remove_temp=True,
+        logger=None,
+    )
+
+    # 清理暫存
+    try: os.remove(audio_path)
+    except: pass
+
+    caption = data.get("caption", f"#{indicator_name} #技術分析 #加密貨幣 #wycbotai #新手教學")
+    print(f"[Reel] 完成！{video_path}")
+    return video_path, caption
+
+
+# ── CLI 入口 ──────────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    import sys
+    sys.stdout.reconfigure(encoding="utf-8")
+    name = sys.argv[1] if len(sys.argv) > 1 else "EMA（指數移動平均線）"
+    video_path, caption = generate_indicator_reel(name)
+    print(f"\n影片：{video_path}")
+    print(f"\nCaption:\n{caption}")

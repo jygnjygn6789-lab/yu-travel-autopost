@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 if sys.stdout.encoding and sys.stdout.encoding.lower() not in ('utf-8', 'utf8'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
-from ig_poster import post_feed, post_carousel, post_reel, get_account_info, refresh_token_if_needed, post_wycbotai_carousel
+from ig_poster import post_feed, post_carousel, post_reel, get_account_info, refresh_token_if_needed, post_wycbotai_carousel, post_wycbotai_reel
 from content_gen import generate_travel_post, generate_travel_tip_post
 from travel_data import get_daily_content, get_story_content, get_image_url
 from fb_poster import post_fb_feed, check_fb_page
@@ -490,6 +490,29 @@ def _post_wycbotai_robust(slides: list, caption: str, name: str) -> dict:
     return result
 
 
+def run_wycbotai_reel(indicator_name: str = None):
+    """每天 18:00 發 WycBotAI 技術指標教學 Reel"""
+    from reel_indicator_gen import generate_indicator_reel
+    print(f"\n[WycBotAI Reel] 開始生成指標教學 Reel...")
+    try:
+        video_path, caption = generate_indicator_reel(indicator_name)
+    except Exception as e:
+        print(f"[WycBotAI Reel] 生成失敗：{e}")
+        return
+
+    print(f"[WycBotAI Reel] 上傳影片...")
+    video_url = upload_video(video_path)
+    if not video_url:
+        print("[WycBotAI Reel] 影片上傳失敗，跳過")
+        return
+
+    result = post_wycbotai_reel(video_url, caption)
+    if result.get("id"):
+        print(f"[WycBotAI Reel] 發布成功！ID: {result['id']}")
+    else:
+        print(f"[WycBotAI Reel] 發布失敗：{result}")
+
+
 def run_wycbotai_alt():
     """週二四六發佈：華爾街金句 or 新手常犯的錯（每週交替）"""
     from wycbotai_alt_gen import get_today_alt_post
@@ -551,6 +574,10 @@ if __name__ == "__main__":
                 s.save(os.path.join(out, f"preview_{i+1}.jpg"), quality=95)
             print(f"已存到 output/preview_1~{len(slides)}.jpg")
             print(f"\nCaption:\n{caption}")
+        elif sys.argv[1] == "wycbotai_reel":
+            # python main.py wycbotai_reel [指標名稱（可選）]
+            indicator_arg = sys.argv[2] if len(sys.argv) > 2 else None
+            run_wycbotai_reel(indicator_arg)
         elif sys.argv[1] == "alt":
             # python main.py alt [quotes|mistakes]
             run_wycbotai_alt()
@@ -573,7 +600,9 @@ if __name__ == "__main__":
     else:
         print("\n開始排程自動發文...")
         print("每天 10:00 自動發懶人包輪播（金色風格）")
+        print("每天 12:00 WycBotAI 指標教學輪播 / 金句避雷")
         print("每天 15:00 自動發 Reel 影片（目的地攻略）")
+        print("每天 18:00 WycBotAI 技術指標教學 Reel")
         print("每天 19:00 自動發 Reel 影片（美食/省錢/出國注意）")
         print("每 30 分鐘自動掃描留言（按讚+回覆）")
         print("每 30 分鐘自動掃描關鍵字留言並私訊 DM")
@@ -597,6 +626,7 @@ if __name__ == "__main__":
         schedule.every().day.at("15:00").do(run_daily_reel)
         schedule.every().day.at("19:00").do(run_evening_reel)
         schedule.every().day.at("12:00").do(_wycbotai_daily)
+        schedule.every().day.at("18:00").do(run_wycbotai_reel)
         schedule.every(30).minutes.do(run_comment_bot)
         schedule.every(30).minutes.do(run_keyword_dm_bot)
 

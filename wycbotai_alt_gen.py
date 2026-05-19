@@ -335,8 +335,6 @@ def generate_quotes_post() -> tuple:
 
 def _mistakes_cover(data: dict) -> Image.Image:
     img, draw = _canvas()
-    _tag(draw, "WYCBOTAI · 新手必讀", color=RED)
-
     draw.text((54, 160), data.get("hook_num", "95%"), font=fb(200), fill=RED)
     y = 390
     for line in [data.get("hook_line1", "的新手"), data.get("hook_line2", "都踩過這些坑")]:
@@ -357,8 +355,6 @@ def _mistakes_cover(data: dict) -> Image.Image:
 
 def _mistake_card(mistake: dict, index: int) -> Image.Image:
     img, draw = _canvas()
-    _tag(draw, f"WYCBOTAI · 錯誤 {index:02d}", color=RED)
-
     draw.text((W - 260, 20), f"{index:02d}", font=fb(180), fill=(*RED, 12))
 
     title = mistake.get("title", "")
@@ -393,8 +389,6 @@ def _mistake_card(mistake: dict, index: int) -> Image.Image:
 
 def _mistakes_cta(data: dict) -> Image.Image:
     img, draw = _canvas()
-    _tag(draw, "WYCBOTAI · 免費體驗")
-
     draw.text((54, 170), "避開錯誤還不夠，", font=fb(72), fill=WHITE)
     draw.text((54, 256), "你需要 AI 主動提醒",  font=fb(68), fill=WHITE)
     draw.line([(54, 358), (W - 54, 358)], fill=(*GREEN, 40), width=1)
