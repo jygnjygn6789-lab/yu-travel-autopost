@@ -589,6 +589,10 @@ if __name__ == "__main__":
             else:
                 run_wycbotai_alt()
 
+        # 每週一 08:00 自動抓 @japanuts 最新主題
+        from ig_scraper import refresh_topic_queue
+        schedule.every().monday.at("08:00").do(refresh_topic_queue)
+
         schedule.every().day.at("10:00").do(run_daily_post)
         schedule.every().day.at("15:00").do(run_daily_reel)
         schedule.every().day.at("19:00").do(run_evening_reel)

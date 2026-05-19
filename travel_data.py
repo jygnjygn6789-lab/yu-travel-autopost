@@ -3,6 +3,7 @@
 提供每日旅遊主題和模擬特價資訊
 （未來可串接真實 API）
 """
+import os
 import random
 from datetime import datetime
 
@@ -122,10 +123,23 @@ FLIGHT_DEALS = [
 
 
 import datetime as _dt
+import json as _json
 
 _DEST_DAYS  = {0, 2, 4, 6}   # Mon Wed Fri Sun
 _TIP_DAYS   = {1, 3, 5}      # Tue Thu Sat
 _BASE_DATE  = _dt.date(2026, 1, 1)
+_QUEUE_PATH = os.path.join(os.path.dirname(__file__), "topic_queue.json")
+
+
+def _load_queue() -> dict:
+    """讀取 @japanuts 抓回來的主題佇列，沒有就回傳空 dict"""
+    if os.path.exists(_QUEUE_PATH):
+        try:
+            with open(_QUEUE_PATH, "r", encoding="utf-8") as f:
+                return _json.load(f)
+        except Exception:
+            pass
+    return {}
 
 
 def _cycle_pick(items: list, date: _dt.date, day_set: set):
@@ -159,17 +173,30 @@ def get_daily_content() -> dict:
 
     if weekday == 0:
         return {"type": "linkinbio"}
-    elif weekday in _DEST_DAYS:
-        dest = _cycle_pick(DESTINATIONS, today, _DEST_DAYS)
+
+    queue = _load_queue()
+
+    if weekday in _DEST_DAYS:
+        # 優先用 @japanuts 抓回來的目的地佇列，沒有才用內建清單
+        q_dests = queue.get("destinations", [])
+        if q_dests:
+            dest_name = _cycle_pick(q_dests, today, _DEST_DAYS)
+            dest = {"name": dest_name, "emoji": "✈️"}
+        else:
+            dest = _cycle_pick(DESTINATIONS, today, _DEST_DAYS)
         deal = random.choice(FLIGHT_DEALS)
         return {
             "type": "deal",
             "destination": dest["name"],
-            "emoji": dest["emoji"],
+            "emoji": dest.get("emoji", "✈️"),
             "deal_info": f"{deal['route']} 來回 {deal['price']}（{deal['airline']}）",
         }
     else:
-        tip = _cycle_pick(TRAVEL_TIPS, today, _TIP_DAYS)
+        q_tips = queue.get("tips", [])
+        if q_tips:
+            tip = _cycle_pick(q_tips, today, _TIP_DAYS)
+        else:
+            tip = _cycle_pick(TRAVEL_TIPS, today, _TIP_DAYS)
         return {"type": "tip", "topic": tip}
 
 
