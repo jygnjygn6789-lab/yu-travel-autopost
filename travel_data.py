@@ -6,20 +6,50 @@
 import random
 from datetime import datetime
 
-# 熱門目的地清單
+# 熱門目的地清單（36 個，約 9 週不重複）
 DESTINATIONS = [
+    # 日本
     {"name": "日本東京", "emoji": "🗾", "season": "全年"},
     {"name": "日本大阪", "emoji": "🏯", "season": "全年"},
+    {"name": "日本京都", "emoji": "⛩️", "season": "全年"},
     {"name": "日本北海道", "emoji": "❄️", "season": "冬季"},
+    {"name": "沖繩", "emoji": "🌊", "season": "夏季"},
+    {"name": "日本福岡", "emoji": "🍜", "season": "全年"},
+    {"name": "日本名古屋", "emoji": "🏯", "season": "全年"},
+    {"name": "日本奈良", "emoji": "🦌", "season": "全年"},
+    {"name": "日本廣島", "emoji": "🕊️", "season": "全年"},
+    # 韓國
     {"name": "韓國首爾", "emoji": "🇰🇷", "season": "全年"},
+    {"name": "韓國釜山", "emoji": "🌊", "season": "全年"},
+    {"name": "韓國濟州島", "emoji": "🍊", "season": "全年"},
+    # 東南亞
     {"name": "泰國曼谷", "emoji": "🇹🇭", "season": "全年"},
     {"name": "泰國清邁", "emoji": "🌸", "season": "全年"},
+    {"name": "泰國普吉島", "emoji": "🏖️", "season": "全年"},
     {"name": "越南峴港", "emoji": "🏖️", "season": "全年"},
+    {"name": "越南河內", "emoji": "🇻🇳", "season": "全年"},
+    {"name": "越南胡志明市", "emoji": "🛵", "season": "全年"},
     {"name": "新加坡", "emoji": "🦁", "season": "全年"},
-    {"name": "香港", "emoji": "🏙️", "season": "全年"},
+    {"name": "馬來西亞吉隆坡", "emoji": "🏙️", "season": "全年"},
     {"name": "峇里島", "emoji": "🌴", "season": "全年"},
-    {"name": "沖繩", "emoji": "🌊", "season": "夏季"},
     {"name": "菲律賓長灘島", "emoji": "🏄", "season": "全年"},
+    {"name": "菲律賓宿霧", "emoji": "🤿", "season": "全年"},
+    {"name": "柬埔寨吳哥窟", "emoji": "🏛️", "season": "全年"},
+    # 東北亞/大洋洲
+    {"name": "香港", "emoji": "🏙️", "season": "全年"},
+    {"name": "澳門", "emoji": "🎰", "season": "全年"},
+    {"name": "澳洲雪梨", "emoji": "🦘", "season": "全年"},
+    {"name": "紐西蘭奧克蘭", "emoji": "🥝", "season": "全年"},
+    # 歐洲
+    {"name": "英國倫敦", "emoji": "🎡", "season": "全年"},
+    {"name": "法國巴黎", "emoji": "🗼", "season": "全年"},
+    {"name": "義大利羅馬", "emoji": "🏛️", "season": "全年"},
+    {"name": "西班牙巴塞隆納", "emoji": "⛪", "season": "全年"},
+    # 美洲/其他
+    {"name": "美國紐約", "emoji": "🗽", "season": "全年"},
+    {"name": "美國洛杉磯", "emoji": "🎬", "season": "全年"},
+    {"name": "夏威夷", "emoji": "🌺", "season": "全年"},
+    {"name": "土耳其伊斯坦堡", "emoji": "🕌", "season": "全年"},
 ]
 
 # 出國注意事項主題（星期二、四、六）— 每個主題單獨一篇深度攻略
@@ -91,36 +121,56 @@ FLIGHT_DEALS = [
 ]
 
 
+import datetime as _dt
+
+_DEST_DAYS  = {0, 2, 4, 6}   # Mon Wed Fri Sun
+_TIP_DAYS   = {1, 3, 5}      # Tue Thu Sat
+_BASE_DATE  = _dt.date(2026, 1, 1)
+
+
+def _cycle_pick(items: list, date: _dt.date, day_set: set):
+    """
+    循環輪轉：每 len(items) 個工作日為一輪，
+    同一輪內每個 item 恰好出現一次，保證不重複。
+    """
+    base_ord = _BASE_DATE.toordinal()
+    # 算出從 base 到 date（含）共有幾個「屬於 day_set 的天」
+    idx = sum(
+        1 for i in range(base_ord, date.toordinal() + 1)
+        if _dt.date.fromordinal(i).weekday() in day_set
+    ) - 1  # 0-indexed
+    cycle   = idx // len(items)
+    pos     = idx % len(items)
+    rng     = random.Random(cycle)
+    shuffled = list(items)
+    rng.shuffle(shuffled)
+    return shuffled[pos]
+
+
 def get_daily_content() -> dict:
     """
     根據星期幾決定發什麼內容：
     星期一（weekday 0）              → 主頁連結使用懶人包
-    星期三、五、日（weekday 2,4,6）  → 旅遊目的地懶人包
-    星期二、四、六（weekday 1,3,5）  → 出國注意事項懶人包
-    用日期做 seed，同一天多次呼叫結果相同。
+    星期三、五、日（weekday 2,4,6）  → 旅遊目的地懶人包（循環輪轉，不重複）
+    星期二、四、六（weekday 1,3,5）  → 出國注意事項懶人包（循環輪轉，不重複）
     """
-    today = datetime.now()
-    weekday = today.weekday()   # 0=Mon … 6=Sun
-    seed = today.year * 10000 + today.month * 100 + today.day
-    rng = random.Random(seed)
+    today   = _dt.datetime.now().date()
+    weekday = today.weekday()
 
-    if weekday == 0:               # 一 → 主頁連結懶人包
+    if weekday == 0:
         return {"type": "linkinbio"}
-    elif weekday in (2, 4, 6):     # 三、五、日 → 目的地
-        dest = rng.choice(DESTINATIONS)
-        deal = rng.choice(FLIGHT_DEALS)
+    elif weekday in _DEST_DAYS:
+        dest = _cycle_pick(DESTINATIONS, today, _DEST_DAYS)
+        deal = random.choice(FLIGHT_DEALS)
         return {
             "type": "deal",
             "destination": dest["name"],
             "emoji": dest["emoji"],
             "deal_info": f"{deal['route']} 來回 {deal['price']}（{deal['airline']}）",
         }
-    else:                          # 二、四、六 → 出國注意事項
-        tip = rng.choice(TRAVEL_TIPS)
-        return {
-            "type": "tip",
-            "topic": tip,
-        }
+    else:
+        tip = _cycle_pick(TRAVEL_TIPS, today, _TIP_DAYS)
+        return {"type": "tip", "topic": tip}
 
 
 def get_story_content() -> dict:
