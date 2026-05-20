@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 if sys.stdout.encoding and sys.stdout.encoding.lower() not in ('utf-8', 'utf8'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
-from ig_poster import post_feed, post_carousel, post_reel, get_account_info, refresh_token_if_needed, post_wycbotai_carousel, post_wycbotai_reel
+from ig_poster import post_feed, post_carousel, post_reel, get_account_info, refresh_token_if_needed
 from content_gen import generate_travel_post, generate_travel_tip_post
 from travel_data import get_daily_content, get_story_content, get_image_url
 from fb_poster import post_fb_feed, check_fb_page
@@ -440,133 +440,6 @@ def manual_linkinbio_reel():
     print(f"[Reel] 結果: {result}")
 
 
-def _update_keyword_trigger(indicator_short: str):
-    """發文成功後，把當日指標關鍵字加入 keyword_triggers.json（避免重複）"""
-    import json as _json
-    triggers_path = os.path.join(os.path.dirname(__file__), "keyword_triggers.json")
-    try:
-        with open(triggers_path, "r", encoding="utf-8") as f:
-            triggers = _json.load(f)
-    except Exception:
-        triggers = []
-
-    existing_keywords = [t.get("keyword", "").upper() for t in triggers]
-    if indicator_short.upper() not in existing_keywords:
-        dm_msg = (
-            f"感謝你的留言！\n\n"
-            f"這裡是 WycBotAI 免費體驗連結：\nhttps://wycbotai.com\n\n"
-            f"我們的 AI 每日自動掃描 {indicator_short} 信號，幫你找到最佳進場時機。\n\n"
-            f"有任何問題歡迎繼續留言！"
-        )
-        triggers.append({"keyword": indicator_short, "dm_message": dm_msg, "public_reply": ""})
-        with open(triggers_path, "w", encoding="utf-8") as f:
-            _json.dump(triggers, f, ensure_ascii=False, indent=2)
-        print(f"[WycBotAI] 已新增關鍵字觸發：{indicator_short}")
-
-
-def _post_wycbotai_robust(slides: list, caption: str, name: str) -> dict:
-    """上傳並用 WycBotAI IG 帳號發輪播（最多 3 輪重試）"""
-    import requests as _req
-    for round_n in range(3):
-        urls = _upload_cards_robust(slides, f"{name}_r{round_n}")
-        if len(urls) < 2:
-            print(f"[WycBotAI] 可用圖片不足 2 張，取消發文")
-            return {}
-        result = post_wycbotai_carousel(urls, caption)
-        if "id" in result:
-            return result
-        err = result.get("error", {})
-        code = err.get("code") if isinstance(err, dict) else None
-        subcode = err.get("error_subcode") if isinstance(err, dict) else None
-        if code == 4:
-            print(f"[WycBotAI] Rate limit，今日停止發文")
-            return result
-        elif subcode in (2207052, 2207003):  # URL 被拒 or 下載超時 → 重新上傳
-            print(f"[WycBotAI] 圖片問題（第 {round_n+1} 輪），重新上傳...")
-            continue
-        else:
-            print(f"[WycBotAI] 發文失敗：{err}")
-            return result
-    return result
-
-
-def run_wycbotai_reel(indicator_name: str = None):
-    """每天 18:00 發 WycBotAI 技術指標教學 Reel"""
-    from reel_indicator_gen import generate_indicator_reel
-    print(f"\n[WycBotAI Reel] 開始生成指標教學 Reel...")
-    try:
-        video_path, caption = generate_indicator_reel(indicator_name)
-    except Exception as e:
-        print(f"[WycBotAI Reel] 生成失敗：{e}")
-        return
-
-    print(f"[WycBotAI Reel] 上傳影片...")
-    video_url = upload_video(video_path)
-    if not video_url:
-        print("[WycBotAI Reel] 影片上傳失敗，跳過")
-        return
-
-    result = post_wycbotai_reel(video_url, caption)
-    if result.get("id"):
-        print(f"[WycBotAI Reel] 發布成功！ID: {result['id']}")
-    else:
-        print(f"[WycBotAI Reel] 發布失敗：{result}")
-
-
-def run_wycbotai_kline():
-    """發布 K 線形態教學輪播（每次隨機選 3 種形態）"""
-    import random
-    from kline_pattern_gen import generate_kline_post, KLINE_PATTERNS
-    keys = random.sample(list(KLINE_PATTERNS.keys()), min(3, len(KLINE_PATTERNS)))
-    print(f"\n[K線] 生成形態：{keys}")
-    slides, caption = generate_kline_post(keys)
-    result = _post_wycbotai_robust(slides, caption, name="wyc_kline")
-    if result.get("id"):
-        print(f"[K線] 發文成功！ID: {result['id']}")
-    else:
-        print(f"[K線] 發文失敗：{result}")
-
-
-def run_wycbotai_ict(topic: str = None):
-    """發布 ICT/聰明錢風格輪播（仿 1336cryptoclub 米白風格）"""
-    from ict_post_gen import generate_ict_post
-    from ig_scraper import get_1336_topic
-    name = topic or get_1336_topic() or "斐波那契回調（Fibonacci Retracement）"
-    print(f"\n[ICT] 生成「{name}」輪播...")
-    slides, caption = generate_ict_post(name)
-    result = _post_wycbotai_robust(slides, caption, name="wyc_ict")
-    if result.get("id"):
-        print(f"[ICT] IG 發文成功！ID: {result['id']}")
-    else:
-        print(f"[ICT] 發文失敗：{result}")
-
-
-def run_wycbotai_alt():
-    """週二四六發佈：華爾街金句 or 新手常犯的錯（每週交替）"""
-    from wycbotai_alt_gen import get_today_alt_post
-    slides, caption = get_today_alt_post()
-    result = _post_wycbotai_robust(slides, caption, name="wyc_alt")
-    if result.get("id"):
-        print(f"[WycBotAI Alt] IG 發文成功！ID: {result['id']}")
-    else:
-        print(f"[WycBotAI Alt] 發文失敗：{result}")
-
-
-def run_wycbotai_indicator(indicator_name: str = None):
-    """發布 WycBotAI 每日指標教學輪播（WycBotAI IG 帳號）"""
-    from indicator_tutorial_gen import generate_indicator_post, get_today_indicator
-    name = indicator_name or get_today_indicator()
-    print(f"\n[WycBotAI] 生成「{name}」教學輪播...")
-    slides, caption = generate_indicator_post(name)
-    print(f"[WycBotAI] 上傳並發文...")
-    result = _post_wycbotai_robust(slides, caption, name="wyc_indicator")
-    if result.get("id"):
-        print(f"[WycBotAI] IG 發文成功！ID: {result['id']}")
-        import re as _re
-        kw = name.split("（")[0].strip()
-        _update_keyword_trigger(kw)
-    else:
-        print(f"[WycBotAI] 發文失敗：{result}")
 
 
 if __name__ == "__main__":
@@ -586,90 +459,21 @@ if __name__ == "__main__":
             manual_linkinbio_post()
         elif sys.argv[1] == "linkinbio_reel":
             manual_linkinbio_reel()
-        elif sys.argv[1] == "wycbotai":
-            # python main.py wycbotai [指標名稱（可選）]
-            indicator_arg = sys.argv[2] if len(sys.argv) > 2 else None
-            run_wycbotai_indicator(indicator_arg)
-        elif sys.argv[1] == "wycbotai_preview":
-            # 只生成圖片存到 output/，不發文
-            from indicator_tutorial_gen import generate_indicator_post, get_today_indicator
-            indicator_arg = sys.argv[2] if len(sys.argv) > 2 else None
-            name = indicator_arg or get_today_indicator()
-            slides, caption = generate_indicator_post(name)
-            out = os.path.join(os.path.dirname(__file__), "output")
-            os.makedirs(out, exist_ok=True)
-            for i, s in enumerate(slides):
-                s.save(os.path.join(out, f"preview_{i+1}.jpg"), quality=95)
-            print(f"已存到 output/preview_1~{len(slides)}.jpg")
-            print(f"\nCaption:\n{caption}")
-        elif sys.argv[1] == "kline":
-            # python main.py kline [hammer shooting_star ...]
-            keys = sys.argv[2:] if len(sys.argv) > 2 else None
-            from kline_pattern_gen import generate_kline_post
-            slides, caption = generate_kline_post(keys)
-            result = _post_wycbotai_robust(slides, caption, name="wyc_kline")
-            print(result)
-        elif sys.argv[1] == "ict":
-            # python main.py ict [主題（可選）]
-            indicator_arg = sys.argv[2] if len(sys.argv) > 2 else None
-            run_wycbotai_ict(indicator_arg)
-        elif sys.argv[1] == "wycbotai_reel":
-            # python main.py wycbotai_reel [指標名稱（可選）]
-            indicator_arg = sys.argv[2] if len(sys.argv) > 2 else None
-            run_wycbotai_reel(indicator_arg)
-        elif sys.argv[1] == "alt":
-            # python main.py alt [quotes|mistakes]
-            run_wycbotai_alt()
-        elif sys.argv[1] == "alt_preview":
-            # python main.py alt_preview [quotes|mistakes]
-            from wycbotai_alt_gen import generate_quotes_post, generate_mistakes_post, get_today_alt_post
-            mode = sys.argv[2] if len(sys.argv) > 2 else "auto"
-            if mode == "quotes":
-                slides, caption = generate_quotes_post()
-            elif mode == "mistakes":
-                slides, caption = generate_mistakes_post()
-            else:
-                slides, caption = get_today_alt_post()
-            out = os.path.join(os.path.dirname(__file__), "output")
-            os.makedirs(out, exist_ok=True)
-            for i, s in enumerate(slides):
-                s.save(os.path.join(out, f"preview_alt_{i+1}.jpg"), quality=95)
-            print(f"已存到 output/preview_alt_1~{len(slides)}.jpg")
-            print(f"\nCaption:\n{caption}")
     else:
-        print("\n開始排程自動發文...")
-        print("每天 10:00 自動發懶人包輪播（金色風格）")
-        print("每天 12:00 WycBotAI 指標教學輪播 / 金句避雷")
-        print("每天 15:00 自動發 Reel 影片（目的地攻略）")
-        print("每天 18:00 WycBotAI 技術指標教學 Reel")
-        print("每天 19:00 自動發 Reel 影片（美食/省錢/出國注意）")
-        print("每 30 分鐘自動掃描留言（按讚+回覆）")
-        print("每 30 分鐘自動掃描關鍵字留言並私訊 DM")
+        print("\n[旅遊帳號] 開始排程自動發文...")
+        print("每天 02:00 UTC (10:00 台灣) → 懶人包輪播")
+        print("每天 07:00 UTC (15:00 台灣) → Reel 影片（目的地攻略）")
+        print("每天 11:00 UTC (19:00 台灣) → 晚間 Reel 影片")
+        print("每週一 00:00 UTC (08:00 台灣) → 抓 @japanuts 旅遊主題")
+        print("每 30 分鐘 → 留言掃描 + 關鍵字 DM")
         print("按 Ctrl+C 停止\n")
 
-        import datetime as _dt
-
-        def _wycbotai_daily():
-            """週一三五日→指標教學；週二四六→金句/避雷"""
-            dow = _dt.date.today().isoweekday()  # 1=Mon … 7=Sun
-            if dow in (1, 3, 5, 7):
-                run_wycbotai_indicator()
-            else:
-                run_wycbotai_alt()
-
-        # 每週一 08:00 自動抓 @japanuts 最新主題
         from ig_scraper import refresh_topic_queue
-        from ig_scraper import refresh_topic_queue, refresh_1336_topics
-        schedule.every().monday.at("08:00").do(refresh_topic_queue)
+        schedule.every().monday.at("00:00").do(refresh_topic_queue)
 
-        schedule.every().day.at("10:00").do(run_daily_post)
-        schedule.every().day.at("15:00").do(run_daily_reel)
-        schedule.every().day.at("19:00").do(run_evening_reel)
-        schedule.every().day.at("12:00").do(_wycbotai_daily)
-        schedule.every().day.at("14:00").do(run_wycbotai_kline)
-        schedule.every().day.at("15:30").do(run_wycbotai_ict)
-        schedule.every().day.at("18:00").do(run_wycbotai_reel)
-        schedule.every().wednesday.at("08:00").do(refresh_1336_topics)
+        schedule.every().day.at("02:00").do(run_daily_post)
+        schedule.every().day.at("07:00").do(run_daily_reel)
+        schedule.every().day.at("11:00").do(run_evening_reel)
         schedule.every(30).minutes.do(run_comment_bot)
         schedule.every(30).minutes.do(run_keyword_dm_bot)
 
