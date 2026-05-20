@@ -451,7 +451,7 @@ def _pil_to_np(img: Image.Image):
     return np.array(img.convert("RGB"))
 
 
-def generate_indicator_reel(indicator_name: str = None, voice="zh-TW-YunJheNeural") -> tuple:
+def generate_indicator_reel(indicator_name: str = None, voice="zh-CN-YunxiNeural") -> tuple:
     """
     生成指標教學 Reel（單一連續語音 + crossfade 轉場）
     回傳 (video_path: str, caption: str)
