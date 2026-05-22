@@ -2,5 +2,5 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "python wycbotai_main.py"
+startCommand = "python -u run_all.py"
 restartPolicyType = "ON_FAILURE"
