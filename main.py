@@ -100,7 +100,7 @@ def _post_carousel_robust(cards: list, caption: str, name: str = "card") -> dict
 def run_daily_post():
     """每天早上 10:00 發一則貼文"""
     print("\n[貼文] 開始生成今日貼文...")
-    content = get_daily_content()
+    content = get_daily_content(post_slot=0)
 
     if content["type"] == "linkinbio":
         print("[貼文] 生成主頁連結使用指南（7 張）...")
@@ -145,12 +145,12 @@ def run_daily_post():
 
 
 def run_evening_reel():
-    """每天晚上 7:00 發一則晚間 Reel（根據當天主題生成）"""
+    """每天晚上 7:00 發一則晚間 Reel（不同目的地，與輪播和午間 Reel 錯開）"""
     import json as _json, re as _re, anthropic as _anthropic
     from reel_gen import generate_spot_reel
 
     print("\n[晚間 Reel] 開始生成...")
-    content = get_daily_content()
+    content = get_daily_content(post_slot=2)
     content_type = content["type"]
 
     if content_type == "linkinbio":
@@ -266,12 +266,12 @@ def run_evening_reel():
 
 
 def run_daily_reel():
-    """每天下午 3:00 發一則 Reel（同日目的地）"""
+    """每天下午 3:00 發一則 Reel（不同目的地，與輪播錯開）"""
     import json as _json, re, anthropic
     from reel_gen import generate_spot_reel
 
     print("\n[Reel] 開始生成今日 Reel...")
-    content = get_daily_content()
+    content = get_daily_content(post_slot=1)
     dest_full = content.get("destination", "東京")
     dest = dest_full
     for prefix in ["日本", "韓國", "泰國", "菲律賓", "越南"]:

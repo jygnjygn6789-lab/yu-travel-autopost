@@ -161,12 +161,15 @@ def _cycle_pick(items: list, date: _dt.date, day_set: set):
     return shuffled[pos]
 
 
-def get_daily_content() -> dict:
+def get_daily_content(post_slot: int = 0) -> dict:
     """
     根據星期幾決定發什麼內容：
     星期一（weekday 0）              → 主頁連結使用懶人包
     星期三、五、日（weekday 2,4,6）  → 旅遊目的地懶人包（循環輪轉，不重複）
     星期二、四、六（weekday 1,3,5）  → 出國注意事項懶人包（循環輪轉，不重複）
+
+    post_slot: 0=輪播, 1=午間Reel, 2=晚間Reel
+    同一天三個時段各自錯開不同目的地，避免重複。
     """
     today   = _dt.datetime.now().date()
     weekday = today.weekday()
@@ -179,11 +182,24 @@ def get_daily_content() -> dict:
     if weekday in _DEST_DAYS:
         # 優先用 @japanuts 抓回來的目的地佇列，沒有才用內建清單
         q_dests = queue.get("destinations", [])
+        items = q_dests if q_dests else DESTINATIONS
+        # 每個 slot 往後偏移 N 個目的地，避免同日三篇相同
+        slot_offset = post_slot * (len(items) // 3 or 1)
+        base_ord = _BASE_DATE.toordinal()
+        idx = sum(
+            1 for i in range(base_ord, today.toordinal() + 1)
+            if _dt.date.fromordinal(i).weekday() in _DEST_DAYS
+        ) - 1
+        shifted_idx = (idx + slot_offset) % len(items)
+        cycle   = shifted_idx // len(items)
+        pos     = shifted_idx % len(items)
+        rng     = random.Random(cycle)
+        shuffled = list(items)
+        rng.shuffle(shuffled)
         if q_dests:
-            dest_name = _cycle_pick(q_dests, today, _DEST_DAYS)
-            dest = {"name": dest_name, "emoji": "✈️"}
+            dest = {"name": shuffled[pos], "emoji": "✈️"}
         else:
-            dest = _cycle_pick(DESTINATIONS, today, _DEST_DAYS)
+            dest = shuffled[pos]
         deal = random.choice(FLIGHT_DEALS)
         return {
             "type": "deal",
@@ -193,10 +209,20 @@ def get_daily_content() -> dict:
         }
     else:
         q_tips = queue.get("tips", [])
-        if q_tips:
-            tip = _cycle_pick(q_tips, today, _TIP_DAYS)
-        else:
-            tip = _cycle_pick(TRAVEL_TIPS, today, _TIP_DAYS)
+        items = q_tips if q_tips else TRAVEL_TIPS
+        slot_offset = post_slot * (len(items) // 3 or 1)
+        base_ord = _BASE_DATE.toordinal()
+        idx = sum(
+            1 for i in range(base_ord, today.toordinal() + 1)
+            if _dt.date.fromordinal(i).weekday() in _TIP_DAYS
+        ) - 1
+        shifted_idx = (idx + slot_offset) % len(items)
+        cycle   = shifted_idx // len(items)
+        pos     = shifted_idx % len(items)
+        rng     = random.Random(cycle)
+        shuffled = list(items)
+        rng.shuffle(shuffled)
+        tip = shuffled[pos]
         return {"type": "tip", "topic": tip}
 
 
