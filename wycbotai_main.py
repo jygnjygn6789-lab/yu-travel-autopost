@@ -1,6 +1,6 @@
 """
 WycBotAI IG 自動發文主程式
-帳號：@wycbotai（加密貨幣技術分析教學）
+帳號：@wycbotai2026（加密貨幣技術分析教學）
 排程：
   每天 01:00 UTC (09:00 台灣) → 指標教學輪播（週一三五日）/ 金句避雷（週二四六）
   每天 03:00 UTC (11:00 台灣) → K 線形態輪播
@@ -91,9 +91,9 @@ def _update_keyword_trigger(indicator_short: str):
     if indicator_short.upper() not in existing_keywords:
         dm_msg = (
             f"感謝你的留言！\n\n"
-            f"這裡是 WycBotAI 免費體驗連結：\nhttps://wycbotai.com\n\n"
-            f"我們的 AI 每日自動掃描 {indicator_short} 信號，幫你找到最佳進場時機。\n\n"
-            f"有任何問題歡迎繼續留言！"
+            f"我們有一個免費的 Discord 社群，每日都會發布免費進場訊號！\n\n"
+            f"加入連結：https://discord.gg/WpY5wcuMM\n\n"
+            f"歡迎進來一起學習，有任何問題也可以在裡面問！"
         )
         triggers.append({"keyword": indicator_short, "dm_message": dm_msg, "public_reply": ""})
         with open(triggers_path, "w", encoding="utf-8") as f:
@@ -102,11 +102,12 @@ def _update_keyword_trigger(indicator_short: str):
 
 
 def run_wycbotai_indicator(indicator_name: str = None):
-    """發布 WycBotAI 每日指標教學輪播"""
-    from indicator_tutorial_gen import generate_indicator_post, get_today_indicator
+    """發布 WycBotAI 每日指標教學輪播（ICT 風格）"""
+    from ict_post_gen import generate_ict_post
+    from indicator_tutorial_gen import get_today_indicator
     name = indicator_name or get_today_indicator()
     print(f"\n[WycBotAI] 生成「{name}」教學輪播...")
-    slides, caption = generate_indicator_post(name)
+    slides, caption = generate_ict_post(name)
     result = _post_wycbotai_robust(slides, caption, name="wyc_indicator")
     if result.get("id"):
         print(f"[WycBotAI] IG 發文成功！ID: {result['id']}")
@@ -128,12 +129,10 @@ def run_wycbotai_alt():
 
 
 def run_wycbotai_kline():
-    """發布 K 線形態教學輪播（每次隨機選 3 種形態）"""
-    import random
-    from kline_pattern_gen import generate_kline_post, KLINE_PATTERNS
-    keys = random.sample(list(KLINE_PATTERNS.keys()), min(3, len(KLINE_PATTERNS)))
-    print(f"\n[K線] 生成形態：{keys}")
-    slides, caption = generate_kline_post(keys)
+    """發布 K 線單蠟燭風格輪播（仿 @cryptosnakeboss 極簡風格）"""
+    from kline_single_gen import generate_kline_single_post
+    print(f"\n[K線] 生成單蠟燭風格輪播...")
+    slides, caption = generate_kline_single_post()
     result = _post_wycbotai_robust(slides, caption, name="wyc_kline")
     if result.get("id"):
         print(f"[K線] 發文成功！ID: {result['id']}")
@@ -190,7 +189,14 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         arg = sys.argv[1]
         opt = sys.argv[2] if len(sys.argv) > 2 else None
-        if arg == "indicator":
+        if arg == "daily":
+            import datetime as _dt
+            dow = _dt.date.today().isoweekday()  # 1=Mon … 7=Sun
+            if dow in (1, 3, 5, 7):
+                run_wycbotai_indicator()
+            else:
+                run_wycbotai_alt()
+        elif arg == "indicator":
             run_wycbotai_indicator(opt)
         elif arg == "alt":
             run_wycbotai_alt()
@@ -219,12 +225,19 @@ if __name__ == "__main__":
 
         from ig_scraper import refresh_1336_topics
 
+        from comment_bot import run_wycbotai_keyword_dm
+
         schedule.every().day.at("01:00").do(_wycbotai_daily)
         schedule.every().day.at("03:00").do(run_wycbotai_kline)
         schedule.every().day.at("05:00").do(run_wycbotai_ict)
-        schedule.every().day.at("08:00").do(run_wycbotai_reel)
+        # Reel 暫停，待製作完整版後再加入
+        # schedule.every().day.at("08:00").do(run_wycbotai_reel)
         schedule.every().wednesday.at("00:00").do(refresh_1336_topics)
+        schedule.every(30).minutes.do(run_wycbotai_keyword_dm)
 
         while True:
-            schedule.run_pending()
+            try:
+                schedule.run_pending()
+            except Exception as e:
+                print(f"[WycBotAI] 排程錯誤（繼續執行）: {e}")
             time.sleep(60)
