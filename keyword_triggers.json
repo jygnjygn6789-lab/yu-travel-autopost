@@ -1,7 +1,37 @@
 [
   {
     "keyword": "EMA",
-    "dm_message": "感謝你的留言！\n\n這裡是 WycBotAI 免費體驗連結：\nhttps://wycbotai.com\n\n我們的 AI 每日自動掃描 EMA / RSI / ADX 三重信號，幫你找到最佳進場時機。\n\n有任何問題歡迎繼續留言！",
+    "dm_message": "",
+    "public_reply": "感謝留言！免費 Discord 社群每日發布進場訊號，加入連結在個人主頁 Bio 🔗 歡迎一起學習！"
+  },
+  {
+    "keyword": "K線",
+    "dm_message": "",
+    "public_reply": "感謝留言！免費 Discord 社群每日發布進場訊號，加入連結在個人主頁 Bio 🔗 歡迎一起學習！"
+  },
+  {
+    "keyword": "ICT",
+    "dm_message": "",
+    "public_reply": "感謝留言！免費 Discord 社群每日發布進場訊號，加入連結在個人主頁 Bio 🔗 歡迎一起學習！"
+  },
+  {
+    "keyword": "資金管理與倉位計算",
+    "dm_message": "",
+    "public_reply": "感謝留言！免費 Discord 社群每日發布進場訊號，加入連結在個人主頁 Bio 🔗 歡迎一起學習！"
+  },
+  {
+    "keyword": "布林帶",
+    "dm_message": "感謝你的留言！\n\n我們有一個免費的 Discord 社群，每日都會發布免費進場訊號！\n\n加入連結：https://discord.gg/WpY5wcuMM\n\n歡迎進來一起學習，有任何問題也可以在裡面問！",
+    "public_reply": ""
+  },
+  {
+    "keyword": "KD指標",
+    "dm_message": "感謝你的留言！\n\n我們有一個免費的 Discord 社群，每日都會發布免費進場訊號！\n\n加入連結：https://discord.gg/WpY5wcuMM\n\n歡迎進來一起學習，有任何問題也可以在裡面問！",
+    "public_reply": ""
+  },
+  {
+    "keyword": "支撐位與壓力位",
+    "dm_message": "感謝你的留言！\n\n我們有一個免費的 Discord 社群，每日都會發布免費進場訊號！\n\n加入連結：https://discord.gg/WpY5wcuMM\n\n歡迎進來一起學習，有任何問題也可以在裡面問！",
     "public_reply": ""
   }
 ]

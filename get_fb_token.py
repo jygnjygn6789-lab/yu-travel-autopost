@@ -17,7 +17,7 @@ APP_ID = os.getenv("FB_APP_ID", "857804396816755")
 APP_SECRET = os.getenv("FB_APP_SECRET", "")
 FB_PAGE_ID = os.getenv("FB_PAGE_ID", "1191144084074179")
 REDIRECT_URI = "http://localhost:5001/callback"
-SCOPE = "pages_manage_posts,pages_read_engagement,pages_show_list,instagram_content_publish"
+SCOPE = "pages_manage_posts,pages_read_engagement,pages_show_list,instagram_content_publish,instagram_basic,instagram_manage_comments,instagram_manage_messages"
 
 # 儲存授權碼用
 auth_code = None
@@ -80,18 +80,22 @@ def get_page_token(user_token):
         "access_token": user_token,
     })
     data = resp.json()
-    if "data" not in data:
-        return None, data
+    if "data" in data:
+        for page in data["data"]:
+            if page.get("id") == FB_PAGE_ID:
+                return page["access_token"], page
+        print(f"找到的粉專: {[p.get('name') for p in data['data']]}")
 
-    for page in data["data"]:
-        if page.get("id") == FB_PAGE_ID:
-            return page["access_token"], page
-        # 也印出所有找到的粉專，方便確認
-    print(f"找到的粉專: {[p.get('name') for p in data['data']]}")
-    # 若只有一個粉專直接回傳
-    if len(data["data"]) == 1:
-        return data["data"][0]["access_token"], data["data"][0]
-    return None, data
+    # Business Manager 管理的粉專不在 /me/accounts，直接用頁面 ID 抓
+    print(f"嘗試直接從頁面 ID {FB_PAGE_ID} 取得 token...")
+    direct = requests.get(f"https://graph.facebook.com/v21.0/{FB_PAGE_ID}", params={
+        "fields": "access_token,name",
+        "access_token": user_token,
+    })
+    direct_data = direct.json()
+    if "access_token" in direct_data:
+        return direct_data["access_token"], direct_data
+    return None, direct_data
 
 
 def save_token_to_env(token):
@@ -172,4 +176,44 @@ if __name__ == "__main__":
     # 6. 寫入 .env
     save_token_to_env(page_token)
     print("\n[OK] FB_PAGE_TOKEN saved to .env")
-    print("FB page auto-post is ready!")
+
+    # 7. 抓 WycBotAI IG user ID（從 FB 粉專的連結 IG 帳號）
+    print("\n正在取得 WycBotAI IG 帳號 ID...")
+    ig_resp = requests.get(
+        f"https://graph.facebook.com/v21.0/{FB_PAGE_ID}",
+        params={"fields": "instagram_business_account", "access_token": page_token}
+    )
+    ig_data = ig_resp.json()
+    ig_account = ig_data.get("instagram_business_account", {})
+    ig_user_id = ig_account.get("id")
+
+    if ig_user_id:
+        # 取得 IG 帳號名稱
+        ig_info = requests.get(
+            f"https://graph.facebook.com/v21.0/{ig_user_id}",
+            params={"fields": "username", "access_token": page_token}
+        ).json()
+        ig_username = ig_info.get("username", "?")
+        print(f"[OK] WycBotAI IG 帳號: @{ig_username} (ID: {ig_user_id})")
+
+        # 寫入 .env
+        env_path = os.path.join(os.path.dirname(__file__), ".env")
+        with open(env_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        # 更新 WYCBOTAI_IG_USER_ID
+        if "WYCBOTAI_IG_USER_ID=" in content:
+            lines = content.splitlines()
+            new_lines = [f"WYCBOTAI_IG_USER_ID={ig_user_id}" if l.startswith("WYCBOTAI_IG_USER_ID=") else l for l in lines]
+            with open(env_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(new_lines))
+        else:
+            with open(env_path, "a", encoding="utf-8") as f:
+                f.write(f"\nWYCBOTAI_IG_USER_ID={ig_user_id}\n")
+
+        print(f"[OK] WYCBOTAI_IG_USER_ID={ig_user_id} saved to .env")
+        print("\nWycBotAI IG auto-post is ready!")
+    else:
+        print(f"[WARN] 未找到連結的 IG 帳號: {ig_data}")
+        print("請確認：1) IG 帳號是商業/創作者帳號  2) 已連結到 Wyvbotai FB 粉專")
+        print("FB page auto-post is ready (IG not configured)")

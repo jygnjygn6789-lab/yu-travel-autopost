@@ -68,7 +68,7 @@ def _draw_subtitle(draw, text, y_start=1580):
         y += 88
 
 
-def _scene_intro(data: dict) -> Image.Image:
+def _scene_intro(data: dict, subtitle: str = None) -> Image.Image:
     """封面場景：大指標名 + hook"""
     img, draw = _base_canvas()
 
@@ -126,7 +126,9 @@ def _scene_intro(data: dict) -> Image.Image:
     draw.text((54, H-60), "@wycbotai", font=fr(36), fill=(*GREY, 180))
     draw.text((W-300, H-60), "wycbotai.com", font=fr(36), fill=(*GREEN, 160))
 
-    _draw_subtitle(draw, data.get("scenes", [{}])[0].get("subtitle", ""))
+    sub = subtitle if subtitle is not None else data.get("scenes", [{}])[0].get("subtitle", "")
+    if sub:
+        _draw_subtitle(draw, sub)
     return img
 
 
@@ -154,7 +156,7 @@ def _scene_chart(data: dict, indicator_name: str, subtitle: str) -> Image.Image:
     return img
 
 
-def _scene_text(data: dict, scene: dict, color=GREEN) -> Image.Image:
+def _scene_text(data: dict, scene: dict, color=GREEN, subtitle: str = None) -> Image.Image:
     """文字說明場景：大標題 + 重點條列"""
     img, draw = _base_canvas()
 
@@ -197,11 +199,13 @@ def _scene_text(data: dict, scene: dict, color=GREEN) -> Image.Image:
     draw.line([(0, H - 80), (W, H - 80)], fill=(*GREEN, 40), width=1)
     draw.text((54, H - 60), "@wycbotai", font=fr(36), fill=(*GREY, 180))
 
-    _draw_subtitle(draw, scene.get("subtitle", ""))
+    sub = subtitle if subtitle is not None else scene.get("subtitle", "")
+    if sub:
+        _draw_subtitle(draw, sub)
     return img
 
 
-def _scene_cross(data: dict, cross_type: str, subtitle: str) -> Image.Image:
+def _scene_cross(data: dict, cross_type: str, subtitle: str = "") -> Image.Image:
     """
     黃金交叉 / 死亡交叉 示意圖：
     cross_type = "golden" or "death"
@@ -276,11 +280,12 @@ def _scene_cross(data: dict, cross_type: str, subtitle: str) -> Image.Image:
     draw.line([(0, H-80), (W, H-80)], fill=(*GREEN, 40), width=1)
     draw.text((54, H-60), "@wycbotai", font=fr(36), fill=(*GREY, 180))
 
-    _draw_subtitle(draw, subtitle)
+    if subtitle:
+        _draw_subtitle(draw, subtitle)
     return img
 
 
-def _scene_cta(data: dict, subtitle: str) -> Image.Image:
+def _scene_cta(data: dict, subtitle: str = "") -> Image.Image:
     """CTA 結尾場景"""
     img, draw = _base_canvas()
 
@@ -320,7 +325,8 @@ def _scene_cta(data: dict, subtitle: str) -> Image.Image:
     draw.line([(0, H-80), (W, H-80)], fill=(*GREEN, 40), width=1)
     draw.text((54, H-60), "@wycbotai", font=fr(36), fill=(*GREY, 180))
 
-    _draw_subtitle(draw, subtitle)
+    if subtitle:
+        _draw_subtitle(draw, subtitle)
     return img
 
 
@@ -444,6 +450,45 @@ def _sentence_timings(total_dur: float, subtitles: list) -> list:
     return timings
 
 
+# ── 動態字幕 & crossfade ──────────────────────────────────────────────────────
+
+def _render_subtitle_at(base_img: Image.Image, boundaries: list,
+                        t_global: float, fallback: str = "") -> Image.Image:
+    """在 base_img 上疊加當前時刻的動態字幕（逐字跟著語音出現）"""
+    img = base_img.copy()
+    draw = ImageDraw.Draw(img)
+    if boundaries:
+        spoken = [b for b in boundaries if b["offset"] <= t_global + 0.05]
+        if spoken:
+            text = "".join(b["text"] for b in spoken)[-16:]  # 最近 16 個字元
+            _draw_subtitle(draw, text)
+    elif fallback:
+        _draw_subtitle(draw, fallback)
+    return img
+
+
+def _apply_crossfades(scene_lists: list, n_cf: int = 10) -> list:
+    """相鄰場景間做 numpy 混色轉場（取代 fade-to-black）"""
+    import numpy as np
+    result = list(scene_lists[0])
+    for i in range(1, len(scene_lists)):
+        curr = scene_lists[i]
+        n = min(n_cf, len(result), len(curr))
+        if n < 2:
+            result.extend(curr)
+            continue
+        blend_base = result[-n:]
+        result = result[:-n]
+        for fi in range(n):
+            alpha = (fi + 1) / (n + 1)
+            f1 = np.array(blend_base[fi].convert("RGB")).astype(float)
+            f2 = np.array(curr[fi].convert("RGB")).astype(float)
+            blended = (f1 * (1 - alpha) + f2 * alpha).astype(np.uint8)
+            result.append(Image.fromarray(blended))
+        result.extend(curr[n:])
+    return result
+
+
 # ── 影片合成 ───────────────────────────────────────────────────────────────────
 
 def _pil_to_np(img: Image.Image):
@@ -476,18 +521,57 @@ def generate_indicator_reel(indicator_name: str = None, voice="zh-CN-YunxiNeural
     # ── 1. 一次生成完整語音 ──────────────────────────────────────────────────
     audio_path = os.path.join(out_dir, "reel_full_narration.mp3")
     print(f"[Reel] TTS 完整旁白生成中（{len(narration)} 字）...")
-    _tts_full(narration, audio_path, voice)
+    boundaries = _tts_full(narration, audio_path, voice)
     total_dur = _audio_duration(audio_path)
+    print(f"[Reel] WordBoundary 事件：{len(boundaries)} 個")
     print(f"[Reel] 語音總長：{total_dur:.1f} 秒")
 
     # ── 2. 計算每個場景的時間區段（依字數比例）──────────────────────────────────
     subtitles = [s.get("subtitle", "") for s in scenes]
     timings   = _sentence_timings(total_dur, subtitles)
 
-    # ── 3. 為每個場景建立純視覺片段（不帶音訊）──────────────────────────────────
-    FADE = 0.3   # fade to/from black 秒數
-    CHART_FPS = 24
-    clips = []
+    # ── 3. 建立場景片段 + crossfade 轉場 ──────────────────────────────────────
+    import numpy as np
+    FPS        = 24
+    CHART_FPS  = 15    # chart 用較低 FPS 節省記憶體
+    N_CF       = 16    # crossfade 幀數（≈0.67 秒，明顯可見）
+    CHAR_SPEED = 3.0   # 字幕打字速度（字/秒）
+    clips      = []
+    prev_last_pil = None   # 上一個場景的最後一幀（PIL），用於 crossfade
+
+    def _make_cf_clip(pil_a: Image.Image, pil_b: Image.Image) -> object:
+        """產生 N_CF 幀的 numpy 混色 crossfade clip"""
+        a = np.array(pil_a.convert("RGB")).astype(float)
+        b = np.array(pil_b.convert("RGB")).astype(float)
+        blend_np = []
+        for fi in range(N_CF):
+            alpha = (fi + 1) / (N_CF + 1)
+            blend_np.append((a * (1 - alpha) + b * alpha).astype(np.uint8))
+        return ImageSequenceClip(blend_np, fps=FPS)
+
+    def _typing_clip(base_no_sub: Image.Image, subtitle: str, dur: float) -> object:
+        """打字效果字幕：每秒約 CHAR_SPEED 個字逐漸出現"""
+        n_chars = max(1, len(subtitle))
+        frames_np = []
+        base_np = _pil_to_np(base_no_sub)
+
+        # 先無字幕停留 0.3 秒
+        pause_frames = max(1, int(CHAR_SPEED * 0.3))
+        frames_np.extend([base_np] * pause_frames)
+
+        # 逐字顯示
+        for n in range(1, n_chars + 1):
+            frame = base_no_sub.copy()
+            draw  = ImageDraw.Draw(frame)
+            _draw_subtitle(draw, subtitle[:n])
+            frames_np.append(_pil_to_np(frame))
+
+        # 顯示完後繼續停留到 dur 結束
+        reveal_dur  = pause_frames / CHAR_SPEED + n_chars / CHAR_SPEED
+        hold_frames = max(1, int((dur - reveal_dur) * CHAR_SPEED))
+        frames_np.extend([frames_np[-1]] * hold_frames)
+
+        return ImageSequenceClip(frames_np, fps=CHAR_SPEED)
 
     for i, (scene, (t_start, t_end)) in enumerate(zip(scenes, timings)):
         subtitle = scene.get("subtitle", "")
@@ -497,10 +581,11 @@ def generate_indicator_reel(indicator_name: str = None, voice="zh-CN-YunxiNeural
         print(f"[Reel] 場景 {i+1}/{len(scenes)}：{stype} [{t_start:.1f}s-{t_end:.1f}s]")
 
         if stype == "chart":
-            N_FRAMES = max(24, int(dur * CHART_FPS))
-            chart_frames = get_chart_frames(indicator_name, width=W-8, height=960, n_frames=N_FRAMES)
-            chart_imgs = []
-            for cf in chart_frames:
+            n = max(CHART_FPS, int(dur * CHART_FPS))
+            chart_pils = get_chart_frames(indicator_name, width=W-8, height=960, n_frames=n)
+            np_frames_chart = []
+            first_pil = last_pil = None
+            for cf in chart_pils:
                 base, draw = _base_canvas()
                 draw.line([(0, 8), (W, 8)], fill=GREEN, width=4)
                 draw.text((54, 28), data["indicator_short"], font=fb(72), fill=GREEN)
@@ -511,35 +596,48 @@ def generate_indicator_reel(indicator_name: str = None, voice="zh-CN-YunxiNeural
                 draw.line([(0, H-80), (W, H-80)], fill=(*GREEN, 40), width=1)
                 draw.text((54, H-60), "@wycbotai", font=fr(36), fill=(*GREY, 180))
                 _draw_subtitle(draw, subtitle)
-                chart_imgs.append(_pil_to_np(base))
-            clip = ImageSequenceClip(chart_imgs, fps=CHART_FPS)
+                if first_pil is None:
+                    first_pil = base.copy()
+                last_pil = base.copy()
+                np_frames_chart.append(_pil_to_np(base))
+            clip = ImageSequenceClip(np_frames_chart, fps=CHART_FPS)
         else:
+            # 先渲染無字幕底圖，再加打字效果
             if stype == "intro":
-                frame = _scene_intro(data)
+                base_no_sub = _scene_intro(data, subtitle="")
             elif stype == "cross_golden":
-                frame = _scene_cross(data, "golden", subtitle)
+                base_no_sub = _scene_cross(data, "golden", subtitle="")
             elif stype == "cross_death":
-                frame = _scene_cross(data, "death", subtitle)
+                base_no_sub = _scene_cross(data, "death", subtitle="")
             elif stype == "cta":
-                frame = _scene_cta(data, subtitle)
+                base_no_sub = _scene_cta(data, subtitle="")
             else:
                 color = RED if "錯誤" in scene.get("title", "") else GREEN
-                frame = _scene_text(data, scene, color=color)
-            clip = ImageClip(_pil_to_np(frame), duration=dur)
+                base_no_sub = _scene_text(data, scene, color=color, subtitle="")
 
-        # FadeIn/FadeOut（暗→畫面→暗），不依賴 alpha channel
-        effects = []
-        if i > 0:
-            effects.append(vfx.FadeIn(FADE))
-        if i < len(scenes) - 1:
-            effects.append(vfx.FadeOut(FADE))
-        if effects:
-            clip = clip.with_effects(effects)
+            first_pil = base_no_sub
+            # 最後一幀是完整字幕的畫面（供 crossfade 使用）
+            last_frame = base_no_sub.copy()
+            if subtitle:
+                draw = ImageDraw.Draw(last_frame)
+                _draw_subtitle(draw, subtitle)
+            last_pil = last_frame
+
+            if subtitle:
+                clip = _typing_clip(base_no_sub, subtitle, dur)
+            else:
+                clip = ImageClip(_pil_to_np(base_no_sub), duration=dur)
+
+        # crossfade 插入
+        if prev_last_pil is not None and first_pil is not None:
+            cf_clip = _make_cf_clip(prev_last_pil, first_pil)
+            clips.append(cf_clip)
 
         clips.append(clip)
+        prev_last_pil = last_pil
 
-    # ── 4. 合成視覺，再疊上完整連續音訊 ──────────────────────────────────────
-    print(f"[Reel] 合成影片...")
+    # ── 4. 合成視覺 ───────────────────────────────────────────────────────────
+    print(f"[Reel] 合成影片（crossfade 轉場）...")
     video_only = concatenate_videoclips(clips, method="chain")
     full_audio = AudioFileClip(audio_path)
     # 音訊若比影片長則截短，短則影片延長靜音

@@ -414,7 +414,8 @@ def get_chart_frames(indicator_name: str, width=1072, height=720,
     # 動畫跑完後顯示全部 candles；浮點 index 從 n_start-1 → n-1
     frames = []
     for i in range(n_frames):
-        progress = i / max(n_frames - 1, 1)
+        t        = i / max(n_frames - 1, 1)
+        progress = t * t * (3 - 2 * t)                        # smoothstep 緩動（ease-in-out）
         f_idx    = (n_start - 1) + (n - n_start) * progress   # 浮點 candle index
         n_full   = int(f_idx)                                  # 完整顯示到第 n_full 根
         partial  = f_idx - n_full                              # 最後一根的生長比例 0~1

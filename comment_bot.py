@@ -14,6 +14,11 @@ load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=True)
 IG_USER_ID = os.getenv("IG_USER_ID")
 BASE_URL = "https://graph.instagram.com/v21.0"
 
+# WycBotAI 帳號（FB_PAGE_TOKEN + graph.facebook.com）
+WYCBOTAI_IG_USER_ID = os.getenv("WYCBOTAI_IG_USER_ID")
+FB_BASE_URL = "https://graph.facebook.com/v21.0"
+WYC_DM_REPLIED_FILE = os.path.join(os.path.dirname(__file__), "wyc_dm_replied.json")
+
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 # 已處理留言的紀錄檔（避免重複回覆）
@@ -172,6 +177,122 @@ def run_keyword_dm_bot():
 
     _save_dm_replied(dm_replied)
     print(f"[關鍵字DM] 完成，共發送 {total_dm} 則 DM")
+
+
+# ── WycBotAI 專用 DM Bot（FB_PAGE_TOKEN + graph.facebook.com）─────────────────
+
+def _wyc_get_recent_posts(limit=10) -> list:
+    token = os.getenv("FB_PAGE_TOKEN")
+    resp = requests.get(
+        f"{FB_BASE_URL}/{WYCBOTAI_IG_USER_ID}/media",
+        params={"fields": "id,caption,timestamp", "limit": limit, "access_token": token},
+        timeout=15,
+    )
+    return resp.json().get("data", [])
+
+
+def _wyc_get_comments(media_id: str) -> list:
+    token = os.getenv("FB_PAGE_TOKEN")
+    resp = requests.get(
+        f"{FB_BASE_URL}/{media_id}/comments",
+        params={"fields": "id,text,username,timestamp", "access_token": token},
+        timeout=15,
+    )
+    return resp.json().get("data", [])
+
+
+def _wyc_private_reply(comment_id: str, message: str) -> dict:
+    token = os.getenv("FB_PAGE_TOKEN")
+    resp = requests.post(
+        f"{FB_BASE_URL}/me/messages",
+        params={"access_token": token},
+        json={
+            "recipient": {"comment_id": comment_id},
+            "message": {"text": message},
+        },
+        timeout=15,
+    )
+    return resp.json()
+
+
+def _load_wyc_dm_replied() -> set:
+    if os.path.exists(WYC_DM_REPLIED_FILE):
+        with open(WYC_DM_REPLIED_FILE, "r", encoding="utf-8") as f:
+            return set(json.load(f))
+    return set()
+
+
+def _save_wyc_dm_replied(replied: set):
+    with open(WYC_DM_REPLIED_FILE, "w", encoding="utf-8") as f:
+        json.dump(list(replied), f)
+
+
+def run_wycbotai_keyword_dm():
+    """
+    WycBotAI 帳號：掃描最近貼文留言，偵測關鍵字後自動私訊 DC 連結
+    使用 FB_PAGE_TOKEN + graph.facebook.com
+    """
+    triggers = load_keyword_triggers()
+    if not triggers:
+        print("[WycDM] 無觸發設定，跳過")
+        return
+
+    replied = _load_wyc_dm_replied()
+    total_dm = 0
+
+    posts = _wyc_get_recent_posts(limit=10)
+    if not posts:
+        print("[WycDM] 無法取得貼文，跳過")
+        return
+
+    for post in posts:
+        media_id = post["id"]
+        comments = _wyc_get_comments(media_id)
+
+        for comment in comments:
+            comment_id = comment["id"]
+            if comment_id in replied:
+                continue
+
+            text     = comment.get("text", "").strip()
+            username = comment.get("username", "")
+
+            for trigger in triggers:
+                keyword = trigger.get("keyword", "").strip()
+                if not keyword:
+                    continue
+                if keyword.upper() in text.upper():
+                    dm_msg    = trigger.get("dm_message", "")
+                    pub_reply = trigger.get("public_reply", "")
+
+                    print(f"[WycDM] @{username} 留言含「{keyword}」，發送 DC 連結...")
+
+                    if dm_msg:
+                        result = _wyc_private_reply(comment_id, dm_msg)
+                        if "id" in result:
+                            print(f"[WycDM] DM 發送成功 → @{username}")
+                            total_dm += 1
+                        else:
+                            print(f"[WycDM] DM 失敗: {result}")
+
+                    if pub_reply:
+                        token = os.getenv("FB_PAGE_TOKEN")
+                        pr = requests.post(
+                            f"{FB_BASE_URL}/{comment_id}/replies",
+                            data={"message": pub_reply, "access_token": token},
+                            timeout=15,
+                        ).json()
+                        if "id" in pr:
+                            print(f"[WycDM] 公開回覆成功 → @{username}")
+                        else:
+                            print(f"[WycDM] 公開回覆失敗: {pr}")
+
+                    replied.add(comment_id)
+                    time.sleep(2)
+                    break
+
+    _save_wyc_dm_replied(replied)
+    print(f"[WycDM] 完成，共發送 {total_dm} 則 DM")
 
 
 def generate_reply(username: str, comment_text: str, post_caption: str = "") -> str:
