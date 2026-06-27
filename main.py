@@ -29,15 +29,27 @@ LINKINBIO = "https://yu-travel-linkinbio-visibility-public-production.up.railway
 
 def _upload_cards_robust(cards: list, name: str) -> list:
     """
-    上傳所有卡片，每張最多重試 5 次，並在上傳後用 HEAD 確認 URL 可存取。
+    上傳所有卡片，每張最多重試 5 次。
+    加入隨機 salt pixel 避免 imgbb hash 去重複導致 IG 拒絕同 URL。
     回傳成功的 URL 清單。
     """
+    import io as _io, random as _rand
     import requests as _req
+    from img_uploader import upload_image
+
+    def _upload_salt(img, filename):
+        img2 = img.copy().convert("RGB")
+        r, g, b = img2.getpixel((0, 0))
+        img2.putpixel((0, 0), ((_rand.randint(1, 15) + r) % 256, g, b))
+        buf = _io.BytesIO()
+        img2.save(buf, format="JPEG", quality=92)
+        return upload_image(buf.getvalue(), filename)
+
     urls = []
     for i, card in enumerate(cards):
         url = None
         for attempt in range(5):
-            url = upload_pil_image(card, f"{name}_{i}_r{attempt}.jpg")
+            url = _upload_salt(card, f"{name}_{i}_r{attempt}.jpg")
             if not url:
                 print(f"[上傳] Card {i} 第 {attempt+1} 次失敗，重試...")
                 time.sleep(4)
@@ -97,24 +109,52 @@ def _post_carousel_robust(cards: list, caption: str, name: str = "card") -> dict
     return result
 
 
-def run_daily_post():
-    """每天早上 10:00 發一則貼文"""
-    print("\n[貼文] 開始生成今日貼文...")
-    content = get_daily_content(post_slot=0)
+def _get_next_post_slot() -> int:
+    """讀取並遞增發文輪播計數器（0=CVS, 1=藥妝, 2=美食, 3=景點）"""
+    import json
+    counter_path = os.path.join(os.path.dirname(__file__), "post_counter.json")
+    try:
+        with open(counter_path, encoding="utf-8") as f:
+            data = json.load(f)
+        slot = int(data.get("slot", 0))
+    except Exception:
+        slot = 0
+    next_slot = (slot + 1) % 4
+    with open(counter_path, "w", encoding="utf-8") as f:
+        json.dump({"slot": next_slot}, f)
+    return slot
 
-    if content["type"] == "linkinbio":
-        print("[貼文] 生成主頁連結使用指南（7 張）...")
-        cards, caption = generate_linkinbio_guide()
-    elif content["type"] == "deal":
-        destination = content["destination"]
-        for prefix in ["日本", "韓國", "泰國", "菲律賓", "越南"]:
-            destination = destination.replace(prefix, "")
-        print(f"[貼文] 生成 {destination} 極簡風格懶人包（7 張）...")
-        cards, caption = generate_minimal_guide(destination, mode="destination")
+
+def run_daily_post():
+    """每天早上 10:00 發一則貼文（輪播：CVS → 藥妝 → 美食 → 景點）"""
+    from okinawa_gen import generate_cvs_carousel, generate_drugstore_carousel, generate_food_carousel, generate_okinawa_carousel
+
+    print("\n[貼文] 開始生成今日貼文...")
+    slot = _get_next_post_slot()
+
+    SLOT_LABELS = ["沖繩便利商店必買 TOP5", "沖繩藥妝必買 TOP5", "沖繩必吃美食 TOP5", "沖繩景點攻略"]
+    print(f"[貼文] 今日主題（slot {slot}）：{SLOT_LABELS[slot]}")
+
+    if slot == 0:
+        cards, caption = generate_cvs_carousel()
+    elif slot == 1:
+        cards, caption = generate_drugstore_carousel()
+    elif slot == 2:
+        cards, caption = generate_food_carousel()
     else:
-        topic = content["topic"]
-        print(f"[貼文] 生成「{topic}」極簡風格懶人包（7 張）...")
-        cards, caption = generate_minimal_guide(topic, mode="tip")
+        # slot 3 — general Okinawa topic (linkinbio 或景點)
+        content = get_daily_content(post_slot=0)
+        if content["type"] == "linkinbio":
+            cards, caption = generate_linkinbio_guide()
+        else:
+            topic = content.get("topic") or content.get("destination", "沖繩景點")
+            for prefix in ["日本", "韓國", "泰國", "菲律賓", "越南"]:
+                topic = topic.replace(prefix, "")
+            cards, caption = generate_okinawa_carousel(topic)
+
+    # 每篇都加 Telegram 頻道引流
+    if "t.me/wycbotai" not in caption:
+        caption += "\n\n🔔 加密貨幣免費訊號頻道 👉 t.me/wycbotai\n📊 AI量化訊號｜每日市場分析｜完全免費"
 
     print(f"[貼文] 文案預覽:\n{caption[:100]}...")
     print(f"[貼文] 上傳並發文（自動重試）...")
@@ -145,11 +185,10 @@ def run_daily_post():
 
 
 def run_evening_reel():
-    """每天晚上 7:00 發一則晚間 Reel（不同目的地，與輪播和午間 Reel 錯開）"""
-    import json as _json, re as _re, anthropic as _anthropic
-    from reel_gen import generate_spot_reel
+    """每天晚上 7:00 發一則晚間 HeyGen AI 主播 Reel"""
+    from heygen_video import generate_travel_reel
 
-    print("\n[晚間 Reel] 開始生成...")
+    print("\n[晚間 Reel] 開始生成 HeyGen Reel...")
     content = get_daily_content(post_slot=2)
     content_type = content["type"]
 
@@ -157,105 +196,24 @@ def run_evening_reel():
         manual_linkinbio_reel()
         return
 
-    elif content_type == "deal":
+    if content_type == "deal":
         dest_full = content.get("destination", "東京")
         dest = dest_full
         for prefix in ["日本", "韓國", "泰國", "菲律賓", "越南"]:
             dest = dest.replace(prefix, "")
+        subject = dest
+    else:
+        subject = content.get("topic", "旅遊省錢技巧")
 
-        try:
-            client = _anthropic.Anthropic()
-            msg = client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=400,
-                messages=[{"role": "user", "content": f"""為「{dest}」生成晚間 Reel 內容（著重美食與省錢），JSON 格式：
-{{"highlights": ["美食亮點1（15字內）","美食亮點2","省錢技巧1","省錢技巧2"], "route": "必吃街道或市場", "station": "最近地鐵站", "walk": "步行時間"}}
-繁體中文，具體實用，台灣人視角。"""}]
-            )
-            raw = msg.content[0].text
-            m = _re.search(r'\{.*\}', raw, _re.DOTALL)
-            data = _json.loads(m.group()) if m else {}
-        except Exception as e:
-            print(f"[晚間 Reel] Claude 失敗：{e}")
-            data = {}
+    try:
+        video_path, caption = generate_travel_reel(
+            destination=subject if content_type == "deal" else "",
+            topic=subject if content_type != "deal" else "",
+        )
+    except Exception as e:
+        print(f"[晚間 Reel] HeyGen 失敗：{e}，跳過")
+        return
 
-        highlights = data.get("highlights", [
-            f"{dest}必吃美食 TOP4", f"{dest}平價好店推薦",
-            f"{dest}購物省錢攻略", f"{dest}住宿最划算區域",
-        ])
-        transport = {
-            "route": data.get("route", "當地夜市或美食街"),
-            "station": data.get("station", "市中心站"),
-            "walk": data.get("walk", "5 分鐘"),
-        }
-        spot_name = f"{dest} 美食＆省錢"
-        location = dest_full
-        label = "旅遊省錢"
-        caption = f"""🍜 {dest}美食＆省錢完整攻略！
-
-晚上沒事做？先把這支存起來 📌
-出發前看完省至少 3000 元！
-
-完整懶人包 + 比價連結：
-{LINKINBIO}
-
-❤️ 覺得實用幫我按讚
-🔔 追蹤不錯過每日旅遊優惠
-💬 留言「{dest}」取得完整攻略
-
-#{dest}美食 #{dest}旅遊 #{dest}省錢 #旅遊攻略 #台灣旅遊 #出國省錢"""
-
-    else:  # tips
-        topic = content["topic"]
-        try:
-            client = _anthropic.Anthropic()
-            msg = client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=400,
-                messages=[{"role": "user", "content": f"""為「{topic}」旅遊主題生成 Reel 內容，JSON 格式：
-{{"highlights": ["重點1（15字內）","重點2","重點3","重點4"], "route": "相關建議管道或品牌", "station": "適用對象", "walk": "節省費用或時間"}}
-繁體中文，具體實用，台灣人視角。"""}]
-            )
-            raw = msg.content[0].text
-            m = _re.search(r'\{.*\}', raw, _re.DOTALL)
-            data = _json.loads(m.group()) if m else {}
-        except Exception as e:
-            print(f"[晚間 Reel] Claude 失敗：{e}")
-            data = {}
-
-        highlights = data.get("highlights", [
-            f"{topic}必知重點", f"{topic}常見錯誤避開",
-            f"{topic}省錢技巧", f"{topic}推薦工具",
-        ])
-        transport = {
-            "route": data.get("route", "線上申請最方便"),
-            "station": data.get("station", "所有出國旅客"),
-            "walk": data.get("walk", "省下不少錢"),
-        }
-        spot_name = topic
-        location = "出國必備知識"
-        label = "旅遊攻略"
-        caption = f"""📋 {topic}完整攻略 Reel 版！
-
-很多人出國都忽略這個 ⚠️
-看完這支短片讓你少踩雷！
-
-完整攻略在主頁連結：
-{LINKINBIO}
-
-❤️ 覺得實用幫我按讚
-🔔 追蹤 @taiwan.travel.deals 不錯過更新
-💬 有問題留言問我！
-
-#{topic} #旅遊攻略 #出國注意 #懶人包 #台灣旅遊 #旅遊省錢"""
-
-    video_path = generate_spot_reel(
-        spot_name=spot_name,
-        location=location,
-        label=label,
-        highlights=highlights,
-        transport=transport,
-    )
     print("[晚間 Reel] 上傳影片...")
     video_url = upload_video(video_path)
     if not video_url:
@@ -265,74 +223,50 @@ def run_evening_reel():
     print(f"[晚間 Reel] 結果: {result}")
 
 
+_YU_TOPICS = [
+    "沖繩便利商店必買",
+    "沖繩藥妝店必買",
+    "沖繩必吃美食",
+    "沖繩景點推薦",
+    "沖繩租車攻略",
+    "沖繩住宿選擇",
+    "沖繩交通攻略",
+    "沖繩省錢技巧",
+]
+
+
 def run_daily_reel():
-    """每天下午 3:00 發一則 Reel（不同目的地，與輪播錯開）"""
-    import json as _json, re, anthropic
-    from reel_gen import generate_spot_reel
+    """每天下午 3:00 發一則 Yu 風格 Reel"""
+    from yu_reel_gen import generate_yu_reel
+    import json
 
-    print("\n[Reel] 開始生成今日 Reel...")
-    content = get_daily_content(post_slot=1)
-    dest_full = content.get("destination", "東京")
-    dest = dest_full
-    for prefix in ["日本", "韓國", "泰國", "菲律賓", "越南"]:
-        dest = dest.replace(prefix, "")
-
-    # 用 Claude Haiku 快速生成 4 個亮點 + 交通資訊
+    print("\n[Yu Reel] 開始生成今日 Reel...")
+    counter_path = os.path.join(os.path.dirname(__file__), "reel_counter.json")
     try:
-        client = anthropic.Anthropic()
-        msg = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=400,
-            messages=[{"role": "user", "content": f"""為「{dest}」生成 Reel 內容，JSON 格式回應：
-{{"highlights": ["亮點1（15字內）","亮點2","亮點3","亮點4"], "route": "大眾運輸路線", "station": "下車站名", "walk": "步行時間"}}
-繁體中文，具體實用，台灣人視角。"""}]
-        )
-        raw = msg.content[0].text
-        m = re.search(r'\{.*\}', raw, re.DOTALL)
-        data = _json.loads(m.group()) if m else {}
+        with open(counter_path, encoding="utf-8") as f:
+            idx = int(json.load(f).get("idx", 0))
+    except Exception:
+        idx = 0
+
+    topic = _YU_TOPICS[idx % len(_YU_TOPICS)]
+    with open(counter_path, "w", encoding="utf-8") as f:
+        json.dump({"idx": (idx + 1) % len(_YU_TOPICS)}, f)
+
+    print(f"[Yu Reel] 今日主題：{topic}")
+    try:
+        video_path, caption = generate_yu_reel(topic)
     except Exception as e:
-        print(f"[Reel] Claude 生成失敗：{e}")
-        data = {}
-
-    highlights = data.get("highlights", [
-        f"{dest}必去景點推薦", f"{dest}美食必吃清單",
-        f"{dest}交通省錢攻略", f"{dest}住宿最佳區域"
-    ])
-    transport = {
-        "route": data.get("route", "當地大眾運輸"),
-        "station": data.get("station", "市中心站"),
-        "walk": data.get("walk", "5 分鐘"),
-    }
-
-    video_path = generate_spot_reel(
-        spot_name=dest,
-        location=dest_full,
-        label="旅遊攻略",
-        highlights=highlights,
-        transport=transport,
-    )
-
-    print(f"[Reel] 上傳影片...")
-    video_url = upload_video(video_path)
-    if not video_url:
-        print("[Reel] 影片上傳失敗，跳過")
+        print(f"[Yu Reel] 生成失敗：{e}，跳過")
         return
 
-    linkinbio = "https://yu-travel-linkinbio-visibility-public-production.up.railway.app"
-    caption = f"""✈️ {dest}旅遊攻略 懶人包 Reel 版！
-
-必看亮點全在這支影片裡
-完整攻略 + 機票比價連結在主頁 👇
-{linkinbio}
-
-❤️ 按讚支持更多旅遊分享
-🔔 追蹤 @taiwan.travel.deals 不錯過優惠
-💬 留言「{dest}」取得完整攻略
-
-#{dest}旅遊 #{dest}攻略 #{dest}懶人包 #旅遊Reels #台灣旅遊 #旅遊省錢"""
+    print("[Yu Reel] 上傳影片...")
+    video_url = upload_video(video_path)
+    if not video_url:
+        print("[Yu Reel] 影片上傳失敗，跳過")
+        return
 
     result = post_reel(video_url, caption)
-    print(f"[Reel] 結果: {result}")
+    print(f"[Yu Reel] 結果: {result}")
 
 
 def check_account():
