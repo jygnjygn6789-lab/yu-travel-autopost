@@ -48,10 +48,12 @@ def build_tweet():
     t+="\n".join(rows)
     t+=f"\n\n今天大盤{mood}\n\n"
     t+=f"有興趣跟單的話，來這裡看免費訊號\n"
-    t+=f"👉 t.me/wycbotai\n"
-    t+=f"BingX 開戶可以用我的折扣連結\n"
-    t+=f"👉 {BINGX_URL}\n\n"
-    t+=f"#crypto #BTC #ETH #合約交易 #加密貨幣"
+    t+=f"👉 t.me/wycbotai\n\n"
+    t+=f"還在手動盯盤？試試 AI 自動交易\n"
+    t+=f"WycBotAI 24小時執行策略，Telegram 即時通知\n"
+    t+=f"入門版 $30/月 👉 wycbotai-production.up.railway.app\n\n"
+    t+=f"BingX 開戶折扣連結 👉 {BINGX_URL}\n\n"
+    t+=f"#crypto #BTC #ETH #合約交易 #加密貨幣 #AlgoTrading"
     return t
 
 def post_daily_analysis():
@@ -79,7 +81,10 @@ def post_weekly_recruit():
         f"👉 t.me/wycbotai\n\n"
         "想在 BingX 開戶的話這裡有折扣\n"
         f"👉 {BINGX_URL}\n\n"
-        "#crypto #BTC #加密貨幣 #合約交易 #被動收入"
+        "想讓 AI 幫你自動執行交易策略？\n"
+        "WycBotAI 24小時自動開平倉，入門版 $30/月\n"
+        f"👉 wycbotai-production.up.railway.app\n\n"
+        "#crypto #BTC #加密貨幣 #合約交易 #被動收入 #AlgoTrading"
     )
     print(f"[Twitter] 週報推文:\n{tweet}")
     try:
