@@ -1,91 +1,95 @@
-"""
-twitter_poster.py — 自動發推文到 @wl00312862
-每天發 BTC/ETH 市場分析 + BingX referral
-"""
-import os
-import tweepy
+# -*- coding: utf-8 -*-
+import os, urllib.request, json, tweepy
 from datetime import datetime, timezone, timedelta
 
-# Twitter API 憑證
-API_KEY             = os.getenv("TW_API_KEY",    "j2FKBI0bJP3c1KOlrq4Uh0zsm")
-API_SECRET          = os.getenv("TW_API_SECRET", "mpAymPkpoNXqgAf7pQKsjdUHFgaVru9NYmWbWkHCYj7QhtIDz6")
-ACCESS_TOKEN        = os.getenv("TW_ACCESS_TOKEN",  "1892680440185815042-kT98ZP3NGQfPlrzwjuE0SUy8SCwyw3")
-ACCESS_TOKEN_SECRET = os.getenv("TW_ACCESS_TOKEN_SECRET", "uGFKxNrnUUOygidKfLDm3X4vyJSYSYvPNY0YRGKjzo39V")
-
-BINGX_URL = "https://bingxdao.com/invite/LKUUM8/"
-TG_CHANNEL = "https://t.me/wycbotai"
+API_KEY             = os.getenv("TWITTER_API_KEY",            "j2FKBI0bJP3c1KOlrq4Uh0zsm")
+API_KEY_SECRET      = os.getenv("TWITTER_API_KEY_SECRET",     "mpAymPkpoNXqgAf7pQKsjdUHFgaVru9NYmWbWkHCYj7QhtIDz6")
+ACCESS_TOKEN        = os.getenv("TWITTER_ACCESS_TOKEN",       "1892680440185815042-kT98ZP3NGQfPlrzwjuE0SUy8SCwyw3")
+ACCESS_TOKEN_SECRET = os.getenv("TWITTER_ACCESS_TOKEN_SECRET","uGFKxNrnUUOygidKfLDm3X4vyJSYSYvPNY0YRGKjzo39V")
+BINGX_URL = "bingxdao.com/invite/LKUUM8/"
 
 def _client():
-    return tweepy.Client(
-        consumer_key=API_KEY,
-        consumer_secret=API_SECRET,
-        access_token=ACCESS_TOKEN,
-        access_token_secret=ACCESS_TOKEN_SECRET,
-    )
+    return tweepy.Client(consumer_key=API_KEY, consumer_secret=API_KEY_SECRET,
+        access_token=ACCESS_TOKEN, access_token_secret=ACCESS_TOKEN_SECRET)
 
 def _twn_now():
-    return (datetime.now(timezone.utc) + timedelta(hours=8)).strftime("%m/%d %H:%M")
+    return (datetime.now(timezone.utc)+timedelta(hours=8)).strftime("%m/%d %H:%M")
 
-def post_tweet(text: str) -> dict:
-    """發推文，回傳 {ok, tweet_id, error}"""
+def _get_price_rsi_trend(sym):
+    url = f"https://fapi.binance.com/fapi/v1/klines?symbol={sym}&interval=4h&limit=60"
+    c = [float(k[4]) for k in json.loads(urllib.request.urlopen(url, timeout=8).read())]
+    k2=2/21; v=sum(c[:20])/20
+    for x in c[20:]: v=x*k2+v*(1-k2)
+    e20=v; k2=2/56; v=sum(c[:55])/55
+    for x in c[55:]: v=x*k2+v*(1-k2)
+    e55=v
+    g=[max(c[i]-c[i-1],0) for i in range(1,len(c))]
+    l=[max(c[i-1]-c[i],0) for i in range(1,len(c))]
+    ag=sum(g[-14:])/14; al=sum(l[-14:])/14
+    rsi=round(100-100/(1+ag/al)) if al else 100
+    p=c[-1]
+    ps=f"{p:,.0f}" if p>=1000 else (f"{p:.2f}" if p>=1 else f"{p:.4f}")
+    return ps, rsi, e20>e55
+
+def build_tweet():
+    coins=[("BTCUSDT","BTC"),("ETHUSDT","ETH"),("SOLUSDT","SOL"),("DOGEUSDT","DOGE")]
+    rows=[]; bull=0; bear=0
+    for sym,name in coins:
+        try:
+            ps,rsi,up=_get_price_rsi_trend(sym)
+            arr="▲" if up else "▼"
+            trend="多" if up else "空"
+            rows.append(f"{arr} #{name} ${ps}  RSI{rsi}  偏{trend}")
+            if up: bull+=1
+            else: bear+=1
+        except: pass
+    mood="偏多，可以留意做多的機會喔" if bull>=3 else ("偏空，先降低倉位、等訊號比較安全" if bear>=3 else "幣種分歧，選強勢幣做多就好")
+    t=f"AI自動交易 每日掃描 {_twn_now()} TWN\n\n"
+    t+="\n".join(rows)
+    t+=f"\n\n今天大盤{mood}\n\n"
+    t+=f"有興趣跟單的話，來這裡看免費訊號\n"
+    t+=f"👉 t.me/wycbotai\n"
+    t+=f"BingX 開戶可以用我的折扣連結\n"
+    t+=f"👉 {BINGX_URL}\n\n"
+    t+=f"#crypto #BTC #ETH #合約交易 #加密貨幣"
+    return t
+
+def post_daily_analysis():
+    tweet=build_tweet()
+    print(f"推文內容:\n{tweet}\n字數:{len(tweet)}")
     try:
-        client = _client()
-        resp = client.create_tweet(text=text)
-        tweet_id = resp.data["id"]
-        print(f"[Twitter] 推文成功 ID={tweet_id}")
-        return {"ok": True, "tweet_id": tweet_id}
+        r=_client().create_tweet(text=tweet)
+        print(f"成功 ID:{r.data['id']}")
+        return True
     except Exception as e:
-        print(f"[Twitter] 推文失敗: {e}")
-        return {"ok": False, "error": str(e)}
+        print(f"失敗:{e}")
+        return False
 
-
-def build_daily_tweet(btc_price: float, btc_trend: str, btc_rsi: float,
-                       eth_price: float, eth_trend: str, eth_rsi: float) -> str:
-    """生成每日市場分析推文"""
-    btc_emoji = "📈" if btc_trend == "多頭" else "📉" if btc_trend == "空頭" else "↔️"
-    eth_emoji = "📈" if eth_trend == "多頭" else "📉" if eth_trend == "空頭" else "↔️"
-
-    return (
-        f"📊 加密市場早報 {_twn_now()} TWN\n\n"
-        f"#BTC ${btc_price:,.0f}\n"
-        f"{btc_emoji} 趨勢：{btc_trend}｜RSI {btc_rsi:.0f}\n\n"
-        f"#ETH ${eth_price:,.0f}\n"
-        f"{eth_emoji} 趨勢：{eth_trend}｜RSI {eth_rsi:.0f}\n\n"
-        f"🔔 免費訊號頻道 {TG_CHANNEL}\n"
-        f"🏦 BingX 開戶折扣 {BINGX_URL}\n\n"
-        f"#crypto #比特幣 #加密貨幣 #合約交易 #BTC #ETH"
+def post_weekly_recruit():
+    """每週三發一篇吸引入會的推文"""
+    tweet = (
+        "老實說，我也是散戶出身\n\n"
+        "剛開始做合約的時候虧很慘\n"
+        "後來才學會用 AI 自動交易來輔助判斷\n"
+        "不是叫你全部交給機器，是讓 AI 幫你過濾雜訊\n\n"
+        "現在每天把掃描結果整理出來免費分享\n"
+        "BTC ETH SOL 等 25 個幣種\n"
+        "有訊號才發，沒把握的不發\n\n"
+        "歡迎來看看，完全免費\n"
+        f"👉 t.me/wycbotai\n\n"
+        "想在 BingX 開戶的話這裡有折扣\n"
+        f"👉 {BINGX_URL}\n\n"
+        "#crypto #BTC #加密貨幣 #合約交易 #被動收入"
     )
+    print(f"[Twitter] 週報推文:\n{tweet}")
+    try:
+        r = _client().create_tweet(text=tweet)
+        print(f"[Twitter] 週報推文成功 ID:{r.data['id']}")
+        return True
+    except Exception as e:
+        print(f"[Twitter] 週報推文失敗:{e}")
+        return False
 
 
-def build_signal_tweet(symbol: str, side: str, price: float,
-                        sl: float, tp: float, strategy: str) -> str:
-    """生成訊號推文"""
-    side_str = "做多 ▲" if side.lower() == "buy" else "做空 ▼"
-    sl_pct = abs(price - sl) / price * 100 if sl else 0
-    tp_pct = abs(tp - price) / price * 100 if tp else 0
-
-    return (
-        f"🤖 AI訊號 #{symbol}\n\n"
-        f"{side_str}\n"
-        f"進場：${price:,.4f}\n"
-        f"止損：${sl:,.4f} (-{sl_pct:.1f}%)\n"
-        f"止盈：${tp:,.4f} (+{tp_pct:.1f}%)\n\n"
-        f"策略：{strategy}\n\n"
-        f"🔔 更多訊號 {TG_CHANNEL}\n"
-        f"🏦 BingX 開戶 {BINGX_URL}\n\n"
-        f"#crypto #{symbol} #合約交易 #CryptoSignals"
-    )
-
-
-if __name__ == "__main__":
-    # 快速測試
-    result = post_tweet(
-        f"🤖 WycBotAI 加密貨幣訊號頻道正式上線！\n\n"
-        f"✅ 每日 BTC/ETH 市場分析\n"
-        f"✅ AI 量化策略即時訊號\n"
-        f"✅ 完全免費追蹤\n\n"
-        f"🔔 Telegram 頻道 {TG_CHANNEL}\n"
-        f"🏦 BingX 開戶折扣 {BINGX_URL}\n\n"
-        f"#crypto #BTC #ETH #加密貨幣 #合約交易"
-    )
-    print(result)
+if __name__=="__main__":
+    post_daily_analysis()

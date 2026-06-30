@@ -127,6 +127,18 @@ def _get_next_post_slot() -> int:
 
 def run_daily_post():
     """每天早上 10:00 發一則貼文（輪播：CVS → 藥妝 → 美食 → 景點）"""
+    # 防止重複執行（多個實例同時跑時只讓一個真的發文）
+    lock_path = os.path.join(os.path.dirname(__file__), ".post_lock")
+    import time as _t
+    if os.path.exists(lock_path):
+        lock_age = _t.time() - os.path.getmtime(lock_path)
+        if lock_age < 3600:  # 1小時內已經有實例在跑
+            print("[貼文] 偵測到其他實例正在發文，跳過")
+            return
+    try:
+        open(lock_path, "w").close()
+    except Exception:
+        pass
     from okinawa_gen import generate_cvs_carousel, generate_drugstore_carousel, generate_food_carousel, generate_okinawa_carousel
 
     print("\n[貼文] 開始生成今日貼文...")
@@ -159,6 +171,10 @@ def run_daily_post():
     print(f"[貼文] 文案預覽:\n{caption[:100]}...")
     print(f"[貼文] 上傳並發文（自動重試）...")
     post_result = _post_carousel_robust(cards, caption, name="daily")
+    try:
+        os.remove(lock_path)
+    except Exception:
+        pass
     if not post_result.get("id"):
         print("[貼文] 最終發文失敗，跳過")
         return
@@ -408,6 +424,24 @@ if __name__ == "__main__":
         schedule.every().day.at("02:00").do(run_daily_post)
         schedule.every().day.at("07:00").do(run_daily_reel)
         schedule.every().day.at("11:00").do(run_evening_reel)
+
+        # Twitter 每日分析推文
+        def _run_twitter():
+            try:
+                from twitter_poster import post_daily_analysis
+                post_daily_analysis()
+            except Exception as e:
+                print(f"[Twitter] 排程失敗: {e}")
+        schedule.every().day.at("01:30").do(_run_twitter)   # 09:30 TWN
+        schedule.every().day.at("11:30").do(_run_twitter)   # 19:30 TWN
+
+        def _run_twitter_recruit():
+            try:
+                from twitter_poster import post_weekly_recruit
+                post_weekly_recruit()
+            except Exception as e:
+                print(f"[Twitter] 週報失敗: {e}")
+        schedule.every().wednesday.at("03:00").do(_run_twitter_recruit)  # 週三 11:00 TWN
         schedule.every(30).minutes.do(run_comment_bot)
         schedule.every(30).minutes.do(run_keyword_dm_bot)
 
