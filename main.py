@@ -428,8 +428,8 @@ if __name__ == "__main__":
         # Twitter 每日分析推文
         def _run_twitter():
             try:
-                from twitter_poster import post_daily_analysis
-                post_daily_analysis()
+                from twitter_poster import post_daily_with_threads
+                post_daily_with_threads()
             except Exception as e:
                 print(f"[Twitter] 排程失敗: {e}")
         schedule.every().day.at("01:30").do(_run_twitter)   # 09:30 TWN

@@ -31,40 +31,73 @@ def _get_price_rsi_trend(sym):
     ps=f"{p:,.0f}" if p>=1000 else (f"{p:.2f}" if p>=1 else f"{p:.4f}")
     return ps, rsi, e20>e55
 
-def build_tweet():
+def _fetch_market_data():
+    """取得市場數據，回傳 (rows, mood, bull_coins, bear_coins)"""
     coins=[("BTCUSDT","BTC"),("ETHUSDT","ETH"),("SOLUSDT","SOL"),("DOGEUSDT","DOGE")]
-    rows=[]; bull=0; bear=0
+    rows=[]; bull=0; bear=0; bull_coins=[]; bear_coins=[]
     for sym,name in coins:
         try:
             ps,rsi,up=_get_price_rsi_trend(sym)
             arr="▲" if up else "▼"
             trend="多" if up else "空"
             rows.append(f"{arr} #{name} ${ps}  RSI{rsi}  偏{trend}")
-            if up: bull+=1
-            else: bear+=1
+            if up: bull+=1; bull_coins.append(f"#{name}")
+            else: bear+=1; bear_coins.append(f"#{name}")
         except: pass
-    mood="偏多，可以留意做多的機會喔" if bull>=3 else ("偏空，先降低倉位、等訊號比較安全" if bear>=3 else "幣種分歧，選強勢幣做多就好")
-    t=f"AI自動交易 每日掃描 {_twn_now()} TWN\n\n"
-    t+="\n".join(rows)
-    t+=f"\n\n今天大盤{mood}\n\n"
-    t+=f"有興趣跟單的話，來這裡看免費訊號\n"
-    t+=f"👉 t.me/wycbotai\n\n"
-    t+=f"還在手動盯盤？試試 AI 自動交易\n"
-    t+=f"WycBotAI 24小時執行策略，Telegram 即時通知\n"
-    t+=f"入門版 $30/月 👉 wycbotai-production.up.railway.app\n\n"
-    t+=f"BingX 開戶折扣連結 👉 {BINGX_URL}\n\n"
-    t+=f"#crypto #BTC #ETH #合約交易 #加密貨幣 #AlgoTrading"
-    return t
+    mood="偏多，留意做多機會" if bull>=3 else ("偏空，降低倉位等訊號" if bear>=3 else "幣種分歧，選強勢幣操作")
+    return rows, mood, bull_coins, bear_coins
+
+def build_thread():
+    """回傳 3 則串推內容的 list"""
+    rows, mood, bull_coins, bear_coins = _fetch_market_data()
+
+    # 第 1 則：Hook — 市場總覽
+    t1  = f"📊 加密市場掃描 {_twn_now()} TWN\n\n"
+    t1 += "\n".join(rows)
+    t1 += f"\n\n大盤{mood} 👇 看完整分析"
+
+    # 第 2 則：訊號詳解 + Telegram
+    t2  = "🔍 今日訊號解讀\n\n"
+    if bull_coins:
+        t2 += f"多頭偏強：{' '.join(bull_coins)}\n"
+    if bear_coins:
+        t2 += f"空頭偏強：{' '.join(bear_coins)}\n"
+    t2 += "\nRSI < 40 超賣、> 60 超買\nEMA20 > EMA55 = 短期趨勢向上\n\n"
+    t2 += "📩 每日完整訊號（25+ 幣種）\n"
+    t2 += f"👉 t.me/wycbotai\n\n"
+    t2 += "#crypto #BTC #ETH #合約交易 #加密貨幣"
+
+    # 第 3 則：WycBotAI 推廣
+    t3  = "🤖 還在手動盯盤？\n\n"
+    t3 += "WycBotAI 幫你 24 小時自動執行交易策略\n"
+    t3 += "• EMA × RSI 自動偵測進場\n"
+    t3 += "• 止盈止損全自動，不用守盤\n"
+    t3 += "• Telegram 即時推播開平倉通知\n\n"
+    t3 += "入門版 $30/月，3 個策略同時跑\n"
+    t3 += f"👉 wycbotai-production.up.railway.app\n\n"
+    t3 += f"BingX 開戶折扣 👉 {BINGX_URL}\n\n"
+    t3 += "#AlgoTrading #量化交易 #被動收入"
+
+    return [t1, t2, t3]
 
 def post_daily_analysis():
-    tweet=build_tweet()
-    print(f"推文內容:\n{tweet}\n字數:{len(tweet)}")
+    """發 Thread：第1則市場總覽 → 回覆第2則訊號 → 回覆第3則推廣"""
+    tweets = build_thread()
+    client = _client()
     try:
-        r=_client().create_tweet(text=tweet)
-        print(f"成功 ID:{r.data['id']}")
+        r1 = client.create_tweet(text=tweets[0])
+        t1_id = r1.data['id']
+        print(f"Thread 第1則成功 ID:{t1_id}")
+
+        r2 = client.create_tweet(text=tweets[1], in_reply_to_tweet_id=t1_id)
+        t2_id = r2.data['id']
+        print(f"Thread 第2則成功 ID:{t2_id}")
+
+        r3 = client.create_tweet(text=tweets[2], in_reply_to_tweet_id=t2_id)
+        print(f"Thread 第3則成功 ID:{r3.data['id']}")
         return True
     except Exception as e:
-        print(f"失敗:{e}")
+        print(f"Thread 發文失敗:{e}")
         return False
 
 def post_weekly_recruit():
@@ -96,5 +129,24 @@ def post_weekly_recruit():
         return False
 
 
-if __name__=="__main__":
+def post_daily_with_threads():
+    """同時發 X Thread + Threads 貼文"""
+    # X Thread
     post_daily_analysis()
+
+    # Threads
+    try:
+        from threads_poster import build_threads_post, post_text
+        rows, mood, bull_coins, bear_coins = _fetch_market_data()
+        content = build_threads_post(rows, mood, bull_coins, bear_coins)
+        pid = post_text(content)
+        if pid:
+            print(f"[Threads] 發文成功 ID:{pid}")
+        else:
+            print("[Threads] 發文失敗或未設定 Token")
+    except Exception as e:
+        print(f"[Threads] 例外: {e}")
+
+
+if __name__=="__main__":
+    post_daily_with_threads()
