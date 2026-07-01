@@ -80,24 +80,30 @@ def build_thread():
 
     return [t1, t2, t3]
 
+def build_single_tweet():
+    """單則推文（包含市場掃描 + WycBotAI 推廣）"""
+    rows, mood, bull_coins, bear_coins = _fetch_market_data()
+    t  = f"📊 加密市場掃描 {_twn_now()} TWN\n\n"
+    t += "\n".join(rows) if rows else "（資料取得中）"
+    t += f"\n\n大盤{mood}\n\n"
+    t += "🤖 AI 自動交易幫你 24h 執行策略\n"
+    t += f"WycBotAI 入門版 $30/月 👉 wycbotai-production.up.railway.app\n"
+    t += f"📩 免費訊號 👉 t.me/wycbotai\n"
+    t += f"BingX 折扣 👉 {BINGX_URL}\n\n"
+    t += "#crypto #BTC #ETH #合約交易 #AlgoTrading #量化交易"
+    return t
+
 def post_daily_analysis():
-    """發 Thread：第1則市場總覽 → 回覆第2則訊號 → 回覆第3則推廣"""
-    tweets = build_thread()
-    client = _client()
+    """發單則推文"""
+    tweet = build_single_tweet()
+    print(f"推文內容:\n{tweet}\n字數:{len(tweet)}")
     try:
-        r1 = client.create_tweet(text=tweets[0])
-        t1_id = r1.data['id']
-        print(f"Thread 第1則成功 ID:{t1_id}")
-
-        r2 = client.create_tweet(text=tweets[1], in_reply_to_tweet_id=t1_id)
-        t2_id = r2.data['id']
-        print(f"Thread 第2則成功 ID:{t2_id}")
-
-        r3 = client.create_tweet(text=tweets[2], in_reply_to_tweet_id=t2_id)
-        print(f"Thread 第3則成功 ID:{r3.data['id']}")
+        r = _client().create_tweet(text=tweet)
+        print(f"成功 ID:{r.data['id']}")
         return True
     except Exception as e:
-        print(f"Thread 發文失敗:{e}")
+        print(f"發文失敗:{e}")
+        return False
         return False
 
 def post_weekly_recruit():

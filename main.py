@@ -421,9 +421,9 @@ if __name__ == "__main__":
         from ig_scraper import refresh_topic_queue
         schedule.every().monday.at("00:00").do(refresh_topic_queue)
 
-        schedule.every().day.at("02:00").do(run_daily_post)
-        schedule.every().day.at("07:00").do(run_daily_reel)
-        schedule.every().day.at("11:00").do(run_evening_reel)
+        # schedule.every().day.at("02:00").do(run_daily_post)  # 暫停旅遊發文
+        # schedule.every().day.at("07:00").do(run_daily_reel)  # 暫停旅遊發文
+        # schedule.every().day.at("11:00").do(run_evening_reel)  # 暫停旅遊發文
 
         # Twitter 每日分析推文
         def _run_twitter():
