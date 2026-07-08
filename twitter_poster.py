@@ -2,10 +2,10 @@
 import os, urllib.request, json, tweepy
 from datetime import datetime, timezone, timedelta
 
-API_KEY             = os.getenv("TWITTER_API_KEY",            "j2FKBI0bJP3c1KOlrq4Uh0zsm")
-API_KEY_SECRET      = os.getenv("TWITTER_API_KEY_SECRET",     "mpAymPkpoNXqgAf7pQKsjdUHFgaVru9NYmWbWkHCYj7QhtIDz6")
-ACCESS_TOKEN        = os.getenv("TWITTER_ACCESS_TOKEN",       "1892680440185815042-kT98ZP3NGQfPlrzwjuE0SUy8SCwyw3")
-ACCESS_TOKEN_SECRET = os.getenv("TWITTER_ACCESS_TOKEN_SECRET","uGFKxNrnUUOygidKfLDm3X4vyJSYSYvPNY0YRGKjzo39V")
+API_KEY             = os.getenv("TWITTER_API_KEY",            "FM0d1gw13beFqBsP6vqgoUX43")
+API_KEY_SECRET      = os.getenv("TWITTER_API_KEY_SECRET",     "z0gNPUSMhHMxDZHSKaTEi5tPprXvVCS5wdriT1xy1f9nGzAInl")
+ACCESS_TOKEN        = os.getenv("TWITTER_ACCESS_TOKEN",       "1892680440185815042-TlF5tQ9loUyoMaoXmOSAEeeiA1gzcs")
+ACCESS_TOKEN_SECRET = os.getenv("TWITTER_ACCESS_TOKEN_SECRET","bTNtIh1tWQqhUzB6ZVlEGU8jFEV5vqJkxdQv296wYn3N5")
 BINGX_URL = "bingxdao.com/invite/LKUUM8/"
 
 def _client():
@@ -40,7 +40,7 @@ def _fetch_market_data():
             ps,rsi,up=_get_price_rsi_trend(sym)
             arr="▲" if up else "▼"
             trend="多" if up else "空"
-            rows.append(f"{arr} #{name} ${ps}  RSI{rsi}  偏{trend}")
+            rows.append(f"{arr} {name} ${ps}  RSI{rsi}  偏{trend}")
             if up: bull+=1; bull_coins.append(f"#{name}")
             else: bear+=1; bear_coins.append(f"#{name}")
         except: pass
@@ -86,17 +86,14 @@ def build_single_tweet():
     t  = f"📊 加密市場掃描 {_twn_now()} TWN\n\n"
     t += "\n".join(rows) if rows else "（資料取得中）"
     t += f"\n\n大盤{mood}\n\n"
-    t += "🤖 AI 自動交易幫你 24h 執行策略\n"
-    t += f"WycBotAI 入門版 $30/月 👉 wycbotai-production.up.railway.app\n"
-    t += f"📩 免費訊號 👉 t.me/wycbotai\n"
-    t += f"BingX 折扣 👉 {BINGX_URL}\n\n"
-    t += "#crypto #BTC #ETH #合約交易 #AlgoTrading #量化交易"
+    t += "🤖 AI 自動交易 wycbotai-production.up.railway.app\n"
+    t += f"📩 免費訊號 t.me/wycbotai"
     return t
 
 def post_daily_analysis():
     """發單則推文"""
     tweet = build_single_tweet()
-    print(f"推文內容:\n{tweet}\n字數:{len(tweet)}")
+    print(f"[Twitter] 推文字數:{len(tweet)}")
     try:
         r = _client().create_tweet(text=tweet)
         print(f"成功 ID:{r.data['id']}")
